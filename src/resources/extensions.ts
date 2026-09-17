@@ -1,7 +1,6 @@
+import { EXTENSIONS_VERSIONS } from './apiVersions';
 import { IstioObject } from './base';
 import { PolicyTargetReference, WorkloadSelector } from './types';
-
-const EXT = 'extensions.istio.io';
 
 export interface WasmPluginSpec {
   selector?: WorkloadSelector;
@@ -24,7 +23,7 @@ export interface WasmPluginSpec {
 export class WasmPlugin extends IstioObject<WasmPluginSpec> {
   static kind = 'WasmPlugin';
   static apiName = 'wasmplugins';
-  static apiVersion = [`${EXT}/v1alpha1`];
+  static apiVersion = EXTENSIONS_VERSIONS;
   static urlSegment = 'wasmplugins';
 
   get phase(): string {
@@ -43,6 +42,6 @@ export interface TrafficExtensionSpec {
 export class TrafficExtension extends IstioObject<TrafficExtensionSpec> {
   static kind = 'TrafficExtension';
   static apiName = 'trafficextensions';
-  static apiVersion = [`${EXT}/v1alpha1`];
+  static apiVersion = EXTENSIONS_VERSIONS;
   static urlSegment = 'trafficextensions';
 }

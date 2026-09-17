@@ -1,5 +1,5 @@
 import { Icon } from '@iconify/react';
-import { Box, Chip, Collapse, IconButton, Typography, useTheme } from '@mui/material';
+import { Box, Button, Chip, Collapse, IconButton, Typography, useTheme } from '@mui/material';
 import { ReactNode, useState } from 'react';
 
 /**
@@ -79,6 +79,39 @@ function Scalar({ value }: { value: unknown }) {
   return <Mono>{text}</Mono>;
 }
 
+/**
+ * How many entries of a long list to show before folding the rest away.
+ *
+ * Production AuthorizationPolicies commonly carry fifty or more paths, which
+ * pushes everything below them off the page.
+ */
+const INLINE_LIST_LIMIT = 12;
+
+function ScalarList({ items }: { items: unknown[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const hidden = items.length - INLINE_LIST_LIMIT;
+  const shown = expanded ? items : items.slice(0, INLINE_LIST_LIMIT);
+
+  return (
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignItems: 'center' }}>
+      {shown.map((item, i) => (
+        <Chip
+          key={i}
+          size="small"
+          label={String(item)}
+          variant="outlined"
+          sx={{ fontFamily: 'monospace', maxWidth: '100%' }}
+        />
+      ))}
+      {hidden > 0 && (
+        <Button size="small" onClick={() => setExpanded(e => !e)} sx={{ textTransform: 'none' }}>
+          {expanded ? 'Show less' : `+${hidden} more`}
+        </Button>
+      )}
+    </Box>
+  );
+}
+
 function ArrayNode({
   items,
   collapseDepth,
@@ -93,19 +126,7 @@ function ArrayNode({
   }
   const allScalar = items.every(i => i === null || typeof i !== 'object');
   if (allScalar) {
-    return (
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-        {items.map((item, i) => (
-          <Chip
-            key={i}
-            size="small"
-            label={String(item)}
-            variant="outlined"
-            sx={{ fontFamily: 'monospace' }}
-          />
-        ))}
-      </Box>
-    );
+    return <ScalarList items={items} />;
   }
   return (
     <Box>
@@ -230,11 +251,28 @@ function Muted({ children }: { children: ReactNode }) {
   );
 }
 
-/** `randomSamplingPercentage` -> `Random sampling percentage`. */
+/**
+ * `randomSamplingPercentage` -> `Random sampling percentage`.
+ *
+ * Only schema field names are rewritten. Plenty of keys in an Istio spec are
+ * *data* -- environment variable names, label keys, header names -- and
+ * prettifying those changes the value the user needs to read or copy
+ * (`ISTIO_META_DNS_CAPTURE` must not render as "ISTIO META DNS CAPTURE").
+ */
 export function humanizeKey(key: string): string {
-  const spaced = key
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .trim();
+  if (isDataKey(key)) return key;
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/-+/g, ' ').trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Keys that are values in their own right rather than Istio schema fields. */
+function isDataKey(key: string): boolean {
+  return (
+    key.includes('_') || // ENV_VAR_STYLE
+    key.includes('.') || // app.kubernetes.io/name, request.auth.claims
+    key.includes('/') || // label and annotation keys
+    key.includes(':') ||
+    key.includes('[') || // request.headers[x-admin]
+    /^[A-Z0-9-]+$/.test(key) // ALL-CAPS header names
+  );
 }

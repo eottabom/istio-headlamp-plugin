@@ -89,6 +89,121 @@ export function l7Requirements(rules: AuthorizationRule[] | undefined): string[]
   return found;
 }
 
+/**
+ * One line per `to.operation`, e.g. `GET /api/*` or `DELETE /admin/*`.
+ *
+ * This is what makes a policy findable by the path it guards: Headlamp's table
+ * search matches a column's value, so unless the paths appear in a column,
+ * searching "/admin" finds nothing.
+ */
+export function authorizationOperations(rules: AuthorizationRule[] | undefined): string[] {
+  const out: string[] = [];
+
+  rules?.forEach(rule => {
+    if (!rule.to?.length) {
+      out.push('any operation');
+      return;
+    }
+    rule.to.forEach(to => {
+      const op = to.operation ?? {};
+      const methods = join(op.methods, op.notMethods);
+      const paths = join(op.paths, op.notPaths);
+      const hosts = join(op.hosts, op.notHosts);
+      const ports = join(op.ports, op.notPorts);
+
+      const parts = [
+        methods,
+        paths,
+        hosts ? `host=${hosts}` : '',
+        ports ? `:${ports}` : '',
+      ].filter(Boolean);
+      out.push(parts.length > 0 ? parts.join(' ') : 'any operation');
+    });
+  });
+
+  return [...new Set(out)];
+}
+
+function join(allow?: string[], deny?: string[]): string {
+  return [...(allow ?? []), ...(deny ?? []).map(v => `!${v}`)].join(',');
+}
+
+/**
+ * A short, fixed-size version of {@link authorizationOperations}.
+ *
+ * Real ext-authz policies routinely list fifty or more paths. Printing them all
+ * in a table cell makes a single row taller than the viewport, so the cell shows
+ * counts while {@link authorizationOperations} keeps the full text for search.
+ */
+export function authorizationOperationsBrief(
+  rules: AuthorizationRule[] | undefined,
+  inlineLimit = 2
+): string[] {
+  const out: string[] = [];
+
+  rules?.forEach(rule => {
+    if (!rule.to?.length) {
+      out.push('any operation');
+      return;
+    }
+    rule.to.forEach(to => {
+      const op = to.operation ?? {};
+      const parts = [
+        join(op.methods, op.notMethods),
+        summarise(op.paths, 'path', inlineLimit),
+        op.notPaths?.length ? `(${op.notPaths.length} excluded)` : '',
+        summarise(op.hosts, 'host', inlineLimit),
+        op.ports?.length ? `:${op.ports.join(',')}` : '',
+      ].filter(Boolean);
+      out.push(parts.length > 0 ? parts.join(' ') : 'any operation');
+    });
+  });
+
+  return [...new Set(out)];
+}
+
+function summarise(values: string[] | undefined, noun: string, limit: number): string {
+  if (!values || values.length === 0) return '';
+  if (values.length <= limit) return values.join(',');
+  return `${values.length} ${noun}s`;
+}
+
+/** Every string an authorization rule matches on, flattened. */
+export function ruleSearchTerms(rule: AuthorizationRule): string[] {
+  const out: string[] = [];
+  const push = (v?: string[]) => v && out.push(...v);
+
+  rule.from?.forEach(f => {
+    const s = f.source ?? {};
+    push(s.principals); push(s.notPrincipals);
+    push(s.namespaces); push(s.notNamespaces);
+    push(s.requestPrincipals); push(s.notRequestPrincipals);
+    push(s.ipBlocks); push(s.notIpBlocks);
+    push(s.remoteIpBlocks); push(s.notRemoteIpBlocks);
+    push(s.serviceAccounts); push(s.notServiceAccounts);
+  });
+  rule.to?.forEach(t => {
+    const op = t.operation ?? {};
+    push(op.methods); push(op.notMethods);
+    push(op.paths); push(op.notPaths);
+    push(op.hosts); push(op.notHosts);
+    push(op.ports); push(op.notPorts);
+  });
+  rule.when?.forEach(c => {
+    if (c.key) out.push(c.key);
+    push(c.values); push(c.notValues);
+  });
+
+  return out;
+}
+
+/** Does a rule mention `filter` anywhere? Case-insensitive substring match. */
+export function ruleMatches(rule: AuthorizationRule, filter: string): boolean {
+  if (!filter) return true;
+  const needle = filter.toLowerCase();
+  return ruleSearchTerms(rule).some(term => term.toLowerCase().includes(needle));
+}
+
 /* ---------------------------------- ServiceEntry ---------------------------------- */
 
 export interface ServiceEntryLike {

@@ -6,6 +6,7 @@ import { DestinationRule } from '../../resources/networking';
 import { TrafficPolicy } from '../../resources/types';
 import { EnumChip } from '../common/Badges';
 import { HostLink } from '../common/HostLink';
+import { InlineSpec } from '../common/InlineSpec';
 import { ChipList, LabelPairs, Row, SpecSection } from '../common/SpecSection';
 import { SpecTree } from '../common/SpecTree';
 import { Mono, SpecTable } from './Table';
@@ -49,7 +50,7 @@ export function destinationRuleSections(dr: DestinationRule): ReactNode[] {
               render: s =>
                 s.trafficPolicy ? (
                   <Box sx={{ maxWidth: 520 }}>
-                    <SpecTree value={s.trafficPolicy} collapseDepth={1} />
+                    <InlineSpec value={s.trafficPolicy} />
                   </Box>
                 ) : (
                   <Typography variant="body2" color="text.disabled">
@@ -93,7 +94,7 @@ export function destinationRuleSections(dr: DestinationRule): ReactNode[] {
                 const has = Object.values(rest).some(Boolean);
                 return has ? (
                   <Box sx={{ maxWidth: 480 }}>
-                    <SpecTree value={rest} collapseDepth={0} />
+                    <InlineSpec value={rest} />
                   </Box>
                 ) : (
                   <Typography variant="body2" color="text.disabled">

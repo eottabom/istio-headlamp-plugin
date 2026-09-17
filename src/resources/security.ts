@@ -1,4 +1,8 @@
-import { l7Requirements } from '../lib/analyze';
+import {
+  authorizationOperations,
+  authorizationOperationsBrief,
+  l7Requirements,
+} from '../lib/analyze';
 import { SECURITY_VERSIONS } from './apiVersions';
 import { IstioObject } from './base';
 import { AuthorizationRule, JwtRule, PolicyTargetReference, WorkloadSelector } from './types';
@@ -38,6 +42,16 @@ export class AuthorizationPolicy extends IstioObject<AuthorizationPolicySpec> {
 
   get requiresL7(): boolean {
     return this.l7Requirements.length > 0;
+  }
+
+  /** Full `GET /api/*` summaries. Long, but what the table searches against. */
+  get operations(): string[] {
+    return authorizationOperations(this.spec.rules);
+  }
+
+  /** Counts rather than full lists, so a table cell stays one line per rule. */
+  get operationsBrief(): string[] {
+    return authorizationOperationsBrief(this.spec.rules);
   }
 }
 

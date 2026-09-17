@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { EnumChip } from '../components/common/Badges';
-import { ChipList, LabelPairs, Row } from '../components/common/SpecSection';
+import { ChipList, Row, TextList } from '../components/common/SpecSection';
 import {
   destinationRuleHeaderInfo,
   destinationRuleSections,
@@ -56,6 +56,8 @@ import { Telemetry } from '../resources/telemetry';
 export type IstioGroup = 'Networking' | 'Security' | 'Telemetry' | 'Extensions';
 
 export interface IstioResourceDef<T extends IstioObject = any> {
+  /** Full name for page titles. Defaults to pluralLabel. */
+  title?: string;
   /** Sidebar/route identifier, also the URL segment. */
   id: string;
   label: string;
@@ -77,12 +79,14 @@ const col = (
   id: string,
   label: string,
   getValue: (i: any) => any,
-  render?: (i: any) => ReactNode
+  render?: (i: any) => ReactNode,
+  gridTemplate?: string | number
 ) => ({
   id,
   label,
   getValue,
   ...(render ? { render } : {}),
+  ...(gridTemplate ? { gridTemplate } : {}),
 });
 
 export const ISTIO_RESOURCES: IstioResourceDef[] = [
@@ -101,20 +105,22 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
         'hosts',
         'Hosts',
         (v: VirtualService) => (v.spec.hosts ?? []).join(', '),
-        (v: VirtualService) => <ChipList items={v.spec.hosts} />
+        (v: VirtualService) => <TextList items={v.spec.hosts} />,
+        2
       ),
       col(
         'gateways',
         'Gateways',
         (v: VirtualService) => (v.spec.gateways ?? ['mesh']).join(', '),
-        (v: VirtualService) => <ChipList items={v.spec.gateways ?? ['mesh']} />
+        (v: VirtualService) => <TextList items={v.spec.gateways ?? ['mesh']} />
       ),
       col('routes', 'Routes', (v: VirtualService) => v.routeCount),
       col(
         'destinations',
         'Destinations',
         (v: VirtualService) => v.destinationHosts.join(', '),
-        (v: VirtualService) => <ChipList items={v.destinationHosts} />
+        (v: VirtualService) => <TextList items={v.destinationHosts} />,
+        2
       ),
     ],
     headerInfo: virtualServiceHeaderInfo,
@@ -135,7 +141,8 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
         'host',
         'Host',
         (d: DestinationRule) => d.host ?? '',
-        (d: DestinationRule) => <Mono>{d.host}</Mono>
+        (d: DestinationRule) => <TextList items={d.host ? [d.host] : []} />,
+        2
       ),
       col(
         'tls',
@@ -171,7 +178,8 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
         'hosts',
         'Hosts',
         (s: ServiceEntry) => (s.spec.hosts ?? []).join(', '),
-        (s: ServiceEntry) => <ChipList items={s.spec.hosts} />
+        (s: ServiceEntry) => <TextList items={s.spec.hosts} />,
+        2
       ),
       col(
         'location',
@@ -208,7 +216,8 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
   {
     id: 'gateways',
     label: 'Gateway',
-    pluralLabel: 'Gateways (Istio API)',
+    pluralLabel: 'Gateways (Istio)',
+    title: 'Gateways (Istio API)',
     group: 'Networking',
     icon: 'mdi:door-open',
     cls: Gateway,
@@ -225,13 +234,17 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
         'hosts',
         'Hosts',
         (g: Gateway) => g.allHosts.join(', '),
-        (g: Gateway) => <ChipList items={g.allHosts} />
+        (g: Gateway) => <TextList items={g.allHosts} />,
+        2
       ),
       col(
         'selector',
         'Selector',
         (g: Gateway) => JSON.stringify(g.spec.selector ?? {}),
-        (g: Gateway) => <LabelPairs labels={g.spec.selector} />
+        (g: Gateway) => (
+          <TextList items={Object.entries(g.spec.selector ?? {}).map(([k, v]) => `${k}=${v}`)} />
+        ),
+        1.5
       ),
     ],
     headerInfo: gatewayHeaderInfo,
@@ -308,7 +321,8 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
   {
     id: 'authorizationpolicies',
     label: 'AuthorizationPolicy',
-    pluralLabel: 'Authorization Policies',
+    pluralLabel: 'Authz Policies',
+    title: 'Authorization Policies',
     group: 'Security',
     icon: 'mdi:shield-lock',
     cls: AuthorizationPolicy,
@@ -336,12 +350,22 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
       ),
       col('rules', 'Rules', (a: AuthorizationPolicy) => a.ruleCount),
       col(
+        'operations',
+        'Paths / methods',
+        // getValue drives search, so it carries every path; render stays compact
+        // so a policy with fifty paths does not produce a viewport-tall row.
+        (a: AuthorizationPolicy) => a.operations.join(' '),
+        (a: AuthorizationPolicy) => <TextList items={a.operationsBrief} />,
+        1.5
+      ),
+      col(
         'applies',
         'Applies to',
         (a: AuthorizationPolicy) => a.attachmentKind,
         (a: AuthorizationPolicy) => (
           <AttachmentCell spec={a.spec} namespace={a.metadata.namespace} />
-        )
+        ),
+        1.5
       ),
     ],
     headerInfo: authorizationPolicyHeaderInfo,
@@ -350,7 +374,8 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
   {
     id: 'peerauthentications',
     label: 'PeerAuthentication',
-    pluralLabel: 'Peer Authentications',
+    pluralLabel: 'Peer Authn',
+    title: 'Peer Authentications',
     group: 'Security',
     icon: 'mdi:lock-check',
     cls: PeerAuthentication,
@@ -377,7 +402,8 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
   {
     id: 'requestauthentications',
     label: 'RequestAuthentication',
-    pluralLabel: 'Request Authentications',
+    pluralLabel: 'Request Authn',
+    title: 'Request Authentications',
     group: 'Security',
     icon: 'mdi:key-chain',
     cls: RequestAuthentication,
@@ -387,7 +413,8 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
         'issuers',
         'Issuers',
         (r: RequestAuthentication) => r.issuers.join(', '),
-        (r: RequestAuthentication) => <ChipList items={r.issuers} />
+        (r: RequestAuthentication) => <TextList items={r.issuers} />,
+        2
       ),
     ],
     headerInfo: requestAuthenticationHeaderInfo,

@@ -5,8 +5,8 @@ import { describeExportTo } from '../../resources/base';
 import { VirtualService } from '../../resources/networking';
 import { HttpMatchRequest, HTTPRoute, HTTPRouteDestination, L4Route } from '../../resources/types';
 import { HostLink, HostList } from '../common/HostLink';
+import { InlineSpec } from '../common/InlineSpec';
 import { ChipList, Row } from '../common/SpecSection';
-import { SpecTree } from '../common/SpecTree';
 import { Mono, SpecTable } from './Table';
 
 export function virtualServiceHeaderInfo(vs: VirtualService): Row[] {
@@ -85,7 +85,7 @@ function L4Section({
             render: r =>
               r.match?.length ? (
                 <Box sx={{ maxWidth: 420 }}>
-                  <SpecTree value={r.match} collapseDepth={1} />
+                  <InlineSpec value={r.match} />
                 </Box>
               ) : (
                 <Typography variant="body2" color="text.disabled">

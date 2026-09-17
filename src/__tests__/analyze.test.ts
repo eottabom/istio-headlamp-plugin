@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   attachmentKind,
+  authorizationOperations,
+  authorizationOperationsBrief,
   collectDestinationHosts,
   describeExportTo,
   l7Requirements,
@@ -181,5 +183,80 @@ describe('describeExportTo', () => {
     expect(describeExportTo(spec(serviceEntries, 'payments-api').exportTo)).toBe(
       '. (this namespace)'
     );
+  });
+});
+
+describe('authorizationOperations', () => {
+  it('summarises method and path so the list can be searched by path', () => {
+    expect(authorizationOperations(spec(authorizationPolicies, 'orders-l7-unenforced').rules)).toEqual([
+      'DELETE /admin/*',
+    ]);
+    expect(authorizationOperations(spec(authorizationPolicies, 'reviews-read-only').rules)).toEqual([
+      'GET /api/*',
+    ]);
+  });
+
+  it('renders a port-only (L4) operation', () => {
+    expect(authorizationOperations(spec(authorizationPolicies, 'shop-l4').rules)).toEqual([':8080']);
+  });
+
+  it('marks negated fields with !', () => {
+    expect(
+      authorizationOperations([{ to: [{ operation: { notMethods: ['GET'], paths: ['/x'] } }] }])
+    ).toEqual(['!GET /x']);
+  });
+
+  it('describes a rule with no "to" block', () => {
+    expect(authorizationOperations([{ from: [{ source: { namespaces: ['a'] } }] }])).toEqual([
+      'any operation',
+    ]);
+  });
+
+  it('deduplicates identical operations', () => {
+    const op = { to: [{ operation: { methods: ['GET'], paths: ['/a'] } }] };
+    expect(authorizationOperations([op, op])).toEqual(['GET /a']);
+  });
+});
+
+describe('authorizationOperationsBrief', () => {
+  // A real ext-authz policy: 50 paths, 11 exclusions, 4 hosts. Printing them in
+  // a table cell made one row taller than the viewport.
+  const bigRules = [
+    {
+      to: [
+        {
+          operation: {
+            hosts: ['a.example.com', 'a.example.com:8043', 'b.example.com', 'b.example.com:443'],
+            notMethods: ['OPTIONS'],
+            paths: Array.from({ length: 50 }, (_, i) => `/svc-${i}/*`),
+            notPaths: Array.from({ length: 11 }, (_, i) => `/public-${i}/*`),
+          },
+        },
+      ],
+    },
+  ];
+
+  it('collapses long lists to counts', () => {
+    expect(authorizationOperationsBrief(bigRules)).toEqual([
+      '!OPTIONS 50 paths (11 excluded) 4 hosts',
+    ]);
+  });
+
+  it('keeps short lists inline', () => {
+    expect(
+      authorizationOperationsBrief([{ to: [{ operation: { methods: ['GET'], paths: ['/a'] } }] }])
+    ).toEqual(['GET /a']);
+  });
+
+  it('still lets search match every path through the full version', () => {
+    const full = authorizationOperations(bigRules).join(' ');
+    expect(full).toContain('/svc-49/*');
+    expect(full).toContain('/public-10/*');
+  });
+
+  it('describes a rule with no "to" block', () => {
+    expect(authorizationOperationsBrief([{ from: [{ source: { namespaces: ['a'] } }] }])).toEqual([
+      'any operation',
+    ]);
   });
 });

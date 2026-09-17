@@ -48,7 +48,9 @@ export function MeshOverview() {
   const version = istiodVersion(status.istiod);
 
   return (
-    <>
+    // Headlamp's own pages get their breathing room from the layout; a plugin
+    // route renders bare, so the last section sat flush against the bottom edge.
+    <Box sx={{ pb: 6 }}>
       <SectionHeader title="Istio mesh overview" />
 
       <Box
@@ -169,7 +171,7 @@ export function MeshOverview() {
           ]}
         />
       </SectionBox>
-    </>
+    </Box>
   );
 }
 

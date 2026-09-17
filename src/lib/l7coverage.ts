@@ -12,7 +12,10 @@ import { resolveWaypoint } from './mesh';
 export type L7Coverage =
   | { state: 'l4'; requirements: [] }
   | { state: 'sidecar'; requirements: string[] }
-  | { state: 'covered'; requirements: string[]; waypoints: string[] }
+  /** A waypoint or an ingress/egress gateway terminates L7 for these targets. */
+  | { state: 'covered'; requirements: string[]; via: string[]; through: 'waypoint' | 'gateway' }
+  /** targetRefs name a Gateway that does not exist, so nothing is enforced. */
+  | { state: 'dangling'; requirements: string[]; missing: string[] }
   | { state: 'uncovered'; requirements: string[] };
 
 export interface L7Subject {
@@ -22,7 +25,7 @@ export interface L7Subject {
 }
 
 export function useL7Coverage(policy: L7Subject): L7Coverage {
-  const { ambientEnabled, waypoints } = useMeshStatus();
+  const { ambientEnabled, waypoints, gateways } = useMeshStatus();
   const [namespaces] = K8s.ResourceClasses.Namespace.useList();
   const [services] = K8s.ResourceClasses.Service.useList({ namespace: policy.metadata.namespace });
 
@@ -33,16 +36,37 @@ export function useL7Coverage(policy: L7Subject): L7Coverage {
   if (!ambientEnabled) return { state: 'sidecar', requirements };
 
   const targets = policy.targetRefs;
+  const policyNs = policy.metadata.namespace;
 
-  // A targetRef pointing straight at a waypoint Gateway is already correct.
-  const named = waypoints.filter(w =>
-    targets.some(t => t.kind === 'Gateway' && w.metadata.name === t.name)
-  );
-  if (named.length > 0) {
-    return { state: 'covered', requirements, waypoints: named.map(w => w.metadata.name) };
+  // A targetRef pointing at a Gateway is enforced by that Gateway's proxy.
+  //
+  // Both kinds count: a waypoint, and an ingress/egress gateway. A gateway is a
+  // full Envoy doing L7 in its own right, so requiring a waypoint there raised
+  // a false "not enforced" alarm on perfectly good ext-authz policies.
+  const gatewayTargets = targets.filter(t => (t.kind ?? '') === 'Gateway');
+  if (gatewayTargets.length > 0) {
+    const matched = gateways.filter(g =>
+      gatewayTargets.some(
+        t => t.name === g.metadata.name && (t.namespace ?? policyNs) === g.metadata.namespace
+      )
+    );
+    if (matched.length > 0) {
+      const allWaypoints = matched.every(g => waypoints.some(w => w.metadata.uid === g.metadata.uid));
+      return {
+        state: 'covered',
+        requirements,
+        via: matched.map(g => g.metadata.name),
+        through: allWaypoints ? 'waypoint' : 'gateway',
+      };
+    }
+    return {
+      state: 'dangling',
+      requirements,
+      missing: gatewayTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
+    };
   }
 
-  const ns = (namespaces ?? []).find(n => n.metadata.name === policy.metadata.namespace) ?? null;
+  const ns = (namespaces ?? []).find(n => n.metadata.name === policyNs) ?? null;
   const targetedServices = (services ?? []).filter(svc =>
     targets.some(t => (t.kind ?? 'Service') === 'Service' && t.name === svc.metadata.name)
   );
@@ -58,7 +82,8 @@ export function useL7Coverage(policy: L7Subject): L7Coverage {
     return {
       state: 'covered',
       requirements,
-      waypoints: [...new Set(covered.map(b => b.name as string))],
+      via: [...new Set(covered.map(b => b.name as string))],
+      through: 'waypoint',
     };
   }
   return { state: 'uncovered', requirements };

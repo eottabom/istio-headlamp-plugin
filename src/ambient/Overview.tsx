@@ -80,7 +80,7 @@ export function MeshOverview() {
                 : 'Ambient'
               : 'Sidecar'
           }
-          detail={status.ambientEnabled ? 'ztunnel DaemonSet present' : 'no ztunnel DaemonSet'}
+          detail={describeEnrolment(enrolment)}
           tone="ok"
         />
         <DaemonSetCard
@@ -237,6 +237,19 @@ export function WaypointSection({ waypoints }: { waypoints: any[] }) {
       />
     </SectionBox>
   );
+}
+
+/**
+ * Says how the mesh is actually split, rather than restating that ztunnel
+ * exists -- the ztunnel card beside this one already shows that, with counts.
+ */
+function describeEnrolment({ ambient, sidecar }: { ambient: number; sidecar: number }): string {
+  const parts = [
+    ambient > 0 ? `${ambient} ambient` : '',
+    sidecar > 0 ? `${sidecar} sidecar` : '',
+  ].filter(Boolean);
+  if (parts.length === 0) return 'no namespace is enrolled yet';
+  return `${parts.join(', ')} ${ambient + sidecar === 1 ? 'namespace' : 'namespaces'}`;
 }
 
 function StatCard({

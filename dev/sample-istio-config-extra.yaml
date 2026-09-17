@@ -1,0 +1,163 @@
+# Instances of the Istio kinds the main sample does not cover, so every list and
+# detail page in the plugin has real data to render.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata: {name: shop-ingress, namespace: shop}
+spec:
+  selector: {istio: ingressgateway}
+  servers:
+    - name: https
+      port: {number: 443, name: https, protocol: HTTPS}
+      hosts: ["shop.example.com", "www.shop.example.com"]
+      tls: {mode: SIMPLE, credentialName: shop-tls, minProtocolVersion: TLSV1_2}
+    - name: http-redirect
+      port: {number: 80, name: http, protocol: HTTP}
+      hosts: ["shop.example.com"]
+      tls: {httpsRedirect: true}
+---
+apiVersion: networking.istio.io/v1
+kind: WorkloadEntry
+metadata: {name: legacy-vm-1, namespace: shop}
+spec:
+  address: 10.20.30.40
+  ports: {http: 8080, grpc: 9090}
+  labels: {app: billing, version: v1}
+  network: on-prem
+  locality: ap-northeast-2/ap-northeast-2a
+  weight: 10
+  serviceAccount: billing-vm
+---
+apiVersion: networking.istio.io/v1
+kind: WorkloadGroup
+metadata: {name: billing-vms, namespace: shop}
+spec:
+  metadata:
+    labels: {app: billing}
+    annotations: {owner: platform-team}
+  template:
+    ports: {http: 8080}
+    serviceAccount: billing-vm
+    network: on-prem
+  probe:
+    periodSeconds: 10
+    httpGet: {path: /healthz, port: 8080}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ProxyConfig
+metadata: {name: shop-proxy, namespace: shop}
+spec:
+  selector: {matchLabels: {app: reviews}}
+  concurrency: 4
+  environmentVariables:
+    ISTIO_META_DNS_CAPTURE: "true"
+    ISTIO_META_DNS_AUTO_ALLOCATE: "true"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata: {name: add-response-header, namespace: shop}
+spec:
+  workloadSelector:
+    labels: {app: reviews}
+  priority: 10
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          filterChain:
+            filter: {name: envoy.filters.network.http_connection_manager}
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.lua
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+            inlineCode: |
+              function envoy_on_response(handle)
+                handle:headers():add("x-served-by", "reviews")
+              end
+---
+apiVersion: extensions.istio.io/v1alpha1
+kind: WasmPlugin
+metadata: {name: rate-limit, namespace: shop}
+spec:
+  selector: {matchLabels: {app: reviews}}
+  url: oci://ghcr.io/example/wasm-rate-limit:1.4.2
+  sha256: 3f1c9a2b7d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8
+  imagePullPolicy: IfNotPresent
+  phase: AUTHN
+  priority: 100
+  type: HTTP
+  failStrategy: FAIL_CLOSE
+  pluginConfig:
+    requests_per_minute: 600
+    burst: 50
+    keys: [remote_address, "request.headers[x-api-key]"]
+---
+# Multi-rule policy: exercises several rules, and from/to/when combinations in
+# the same rule, so the Rules table is not just one near-empty row.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: reviews-tiered, namespace: shop}
+spec:
+  targetRefs: [{kind: Service, group: "", name: reviews}]
+  action: ALLOW
+  rules:
+    # Public reads, from anywhere in the mesh.
+    - to:
+        - operation:
+            methods: [GET, HEAD]
+            paths: ["/api/reviews/*", "/healthz"]
+    # Writes only from the orders service account, and only with a valid JWT.
+    - from:
+        - source:
+            principals: ["cluster.local/ns/shop/sa/orders"]
+            namespaces: [shop]
+      to:
+        - operation:
+            methods: [POST, PUT, PATCH]
+            paths: ["/api/reviews/*"]
+      when:
+        - key: request.auth.claims[scope]
+          values: [reviews.write]
+        - key: request.headers[x-internal]
+          values: ["true"]
+    # Admin surface: restricted by source IP as well as identity.
+    - from:
+        - source:
+            principals: ["cluster.local/ns/platform/sa/admin"]
+            ipBlocks: ["10.0.0.0/8"]
+            notIpBlocks: ["10.99.0.0/16"]
+      to:
+        - operation:
+            methods: [DELETE]
+            paths: ["/api/reviews/*/admin"]
+            notPorts: ["15021"]
+      when:
+        - key: request.auth.claims[groups]
+          values: [platform-admins]
+    # Plain L4 rule: metrics scraping by port only.
+    - from:
+        - source:
+            namespaces: [monitoring]
+      to:
+        - operation:
+            ports: ["15020"]
+---
+# DENY policy with several rules, to show the action colouring alongside.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: block-legacy-paths, namespace: shop}
+spec:
+  selector: {matchLabels: {app: reviews}}
+  action: DENY
+  rules:
+    - to:
+        - operation:
+            paths: ["/v1/*", "/debug/*", "/actuator/*"]
+    - to:
+        - operation:
+            methods: [TRACE, CONNECT]
+      when:
+        - key: request.headers[user-agent]
+          notValues: ["kube-probe/*"]

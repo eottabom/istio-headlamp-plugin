@@ -1,6 +1,7 @@
 import { ResourceListView } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
 import { Alert, Box, Typography } from '@mui/material';
 import { ReactNode } from 'react';
+import { isCrdInstalled, useIstioCrds } from '../../lib/detect';
 
 export interface IstioListProps {
   title: ReactNode;
@@ -26,21 +27,35 @@ export function GenericList({
   description,
   id,
 }: IstioListProps) {
+  const { crds, loading, error } = useIstioCrds();
+
+  // Say plainly that the CRD is absent rather than showing a permanently empty
+  // table. `error` means the CRD list itself could not be read (usually RBAC),
+  // in which case we cannot conclude anything and let the table report it.
+  if (!loading && !error && !isCrdInstalled(crds, resourceClass)) {
+    return <NotInstalled kind={resourceClass.kind} />;
+  }
+
   return (
-    <ResourceListView
-      title={title}
-      resourceClass={resourceClass}
-      id={id}
-      columns={['name', 'namespace', ...columns, 'age']}
-    >
-      {description ? (
-        <Box sx={{ px: 2, pb: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            {description}
-          </Typography>
-        </Box>
-      ) : null}
-    </ResourceListView>
+    // Cells hold multi-line values (host lists, path summaries), so every
+    // column -- including the trailing actions one -- aligns to the top rather
+    // than floating in the vertical middle of a tall row.
+    <Box sx={{ pb: 6, '& td': { verticalAlign: 'top' } }}>
+      <ResourceListView
+        title={title}
+        resourceClass={resourceClass}
+        id={id}
+        columns={['name', 'namespace', ...columns, 'age']}
+      >
+        {description ? (
+          <Box sx={{ px: 2, pb: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              {description}
+            </Typography>
+          </Box>
+        ) : null}
+      </ResourceListView>
+    </Box>
   );
 }
 

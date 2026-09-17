@@ -62,6 +62,8 @@ export function isCrdInstalled(
 }
 
 export interface MeshStatus {
+  /** Every Gateway API Gateway, not only the waypoints. */
+  gateways: any[];
   /** istiod deployments in istio-system, usually one per revision. */
   istiod: any[];
   /** ztunnel DaemonSet; present only in ambient installs. */
@@ -99,6 +101,7 @@ export function useMeshStatus(): MeshStatus {
       istiod,
       ztunnel,
       cni,
+      gateways: gateways ?? [],
       waypoints,
       ambientEnabled: Boolean(ztunnel),
       loading: deployments === null || daemonSets === null,

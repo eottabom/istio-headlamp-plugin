@@ -67,22 +67,21 @@ export function registerIstioPlugin() {
     component: () => <WaypointsPage />,
   });
 
-  // Group headers, then one list + detail route per resource.
+  // One flat level of resource entries, ordered by group.
+  //
+  // Nesting them under Networking/Security/... headers read better on paper but
+  // put the labels two levels deep, where the sidebar's indent left so little
+  // width that every entry truncated ("Virtual Servi...", "Gateways (Is..."). A
+  // flat list keeps the full names legible, which matters more.
   ISTIO_GROUPS.forEach(group => {
-    const members = ISTIO_RESOURCES.filter(r => r.group === group);
-    if (members.length === 0) return;
-
-    const groupName = `${ROOT}-group-${group.toLowerCase()}`;
-    registerSidebarEntry({
-      name: groupName,
-      label: group,
-      icon: groupIcon(group),
-      url: `${ROUTE_PREFIX}/${members[0].id}`,
-      parent: ROOT,
-    });
-
-    members.forEach(def => registerResource(def, groupName));
+    ISTIO_RESOURCES.filter(r => r.group === group).forEach(def => registerResource(def, ROOT));
   });
+
+  // Note: entries for CRDs the cluster does not have stay visible. Headlamp
+  // evaluates sidebar entry filters inside a useMemo whose dependencies a
+  // plugin cannot influence, so a filter driven by an async CRD lookup would
+  // apply only sometimes. An entry that intermittently vanishes is worse than
+  // one that is always there, so the list page says the CRD is missing instead.
 
   registerResourceTableColumnsProcessor(meshColumnsProcessor);
 
@@ -121,7 +120,7 @@ function registerResource(def: IstioResourceDef, parent: string) {
     component: () => (
       <GenericList
         id={`istio-${def.id}`}
-        title={def.pluralLabel}
+        title={def.title ?? def.pluralLabel}
         resourceClass={def.cls}
         columns={def.columns}
         description={def.description}
@@ -143,17 +142,4 @@ function registerResource(def: IstioResourceDef, parent: string) {
       />
     ),
   });
-}
-
-function groupIcon(group: string): string {
-  switch (group) {
-    case 'Networking':
-      return 'mdi:lan';
-    case 'Security':
-      return 'mdi:shield-half-full';
-    case 'Telemetry':
-      return 'mdi:chart-line';
-    default:
-      return 'mdi:puzzle-outline';
-  }
 }

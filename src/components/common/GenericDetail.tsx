@@ -1,5 +1,5 @@
 import { DetailsGrid, SectionBox } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
-import { Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { IstioObject } from '../../resources/base';
@@ -35,7 +35,10 @@ export function GenericDetail<T extends IstioObject>({
   const { name, namespace } = useParams<{ name: string; namespace: string }>();
 
   return (
-    <DetailsGrid
+    // Plugin routes render without the padding Headlamp's own pages get, so the
+    // last section (usually Events) sat clipped against the bottom edge.
+    <Box sx={{ pb: 6 }}>
+      <DetailsGrid
       resourceType={resourceClass}
       name={name}
       namespace={namespace}
@@ -78,8 +81,9 @@ export function GenericDetail<T extends IstioObject>({
         }
 
         return nodes;
-      }}
-    />
+        }}
+      />
+    </Box>
   );
 }
 

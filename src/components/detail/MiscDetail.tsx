@@ -6,6 +6,7 @@ import { Gateway, Sidecar } from '../../resources/networking';
 import { Telemetry } from '../../resources/telemetry';
 import { EnumChip } from '../common/Badges';
 import { HostList } from '../common/HostLink';
+import { InlineSpec } from '../common/InlineSpec';
 import { ChipList, ConfigWarning, LabelPairs, Row } from '../common/SpecSection';
 import { SpecTree } from '../common/SpecTree';
 import { Mono, SpecTable } from './Table';
@@ -159,15 +160,7 @@ export function telemetrySections(t: Telemetry): ReactNode[] {
               label: 'Disabled',
               render: x => <Mono>{x.disableSpanReporting ? 'yes' : undefined}</Mono>,
             },
-            {
-              label: 'Custom tags',
-              render: x =>
-                x.customTags ? (
-                  <SpecTree value={x.customTags} collapseDepth={0} />
-                ) : (
-                  <Mono>{undefined}</Mono>
-                ),
-            },
+            { label: 'Custom tags', render: x => <InlineSpec value={x.customTags} /> },
           ]}
         />
       </SectionBox>

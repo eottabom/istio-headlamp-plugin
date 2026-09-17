@@ -99,7 +99,7 @@ export function WaypointsPage() {
   );
 
   return (
-    <>
+    <Box sx={{ pb: 6 }}>
       <SectionHeader title="Waypoints" />
 
       {orphaned.length > 0 && (
@@ -176,6 +176,6 @@ export function WaypointsPage() {
           ]}
         />
       </SectionBox>
-    </>
+    </Box>
   );
 }

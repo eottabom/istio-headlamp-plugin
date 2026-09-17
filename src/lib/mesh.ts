@@ -1,0 +1,186 @@
+import { KubeObject } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
+import {
+  DATAPLANE_MODE,
+  PROXY_CONTAINER,
+  REVISION,
+  SIDECAR_INJECT_ANNOTATION,
+  SIDECAR_INJECTION,
+  USE_WAYPOINT,
+  USE_WAYPOINT_NAMESPACE,
+  WAYPOINT_FOR,
+  WAYPOINT_GATEWAY_CLASS,
+} from './labels';
+
+export type MeshMode = 'ambient' | 'sidecar' | 'out-of-mesh' | 'unknown';
+
+export interface MeshState {
+  mode: MeshMode;
+  /** Short human-readable reason, shown in tooltips. */
+  reason: string;
+  /** Istio revision, when the namespace or workload pins one. */
+  revision?: string;
+}
+
+type Labels = Record<string, string> | undefined;
+
+function labelsOf(obj: KubeObject | undefined | null): Labels {
+  return obj?.metadata?.labels as Labels;
+}
+
+function annotationsOf(obj: KubeObject | undefined | null): Labels {
+  return obj?.metadata?.annotations as Labels;
+}
+
+/**
+ * Mesh state of a namespace, from its labels alone.
+ *
+ * Ambient and sidecar labels can both be present; Istio gives ambient
+ * precedence only when the workload has no injected sidecar, so at the
+ * namespace level we report the ambiguity rather than guessing.
+ */
+export function namespaceMeshState(ns: KubeObject | undefined | null): MeshState {
+  const labels = labelsOf(ns) ?? {};
+  const dataplane = labels[DATAPLANE_MODE];
+  const injection = labels[SIDECAR_INJECTION];
+  const rev = labels[REVISION];
+
+  if (dataplane === 'ambient') {
+    return {
+      mode: 'ambient',
+      reason: `namespace labelled ${DATAPLANE_MODE}=ambient`,
+      revision: rev,
+    };
+  }
+  if (dataplane === 'none') {
+    return { mode: 'out-of-mesh', reason: `namespace labelled ${DATAPLANE_MODE}=none` };
+  }
+  if (injection === 'enabled' || (rev && rev !== 'default' && injection !== 'disabled')) {
+    return {
+      mode: 'sidecar',
+      reason:
+        injection === 'enabled'
+          ? `namespace labelled ${SIDECAR_INJECTION}=enabled`
+          : `namespace labelled ${REVISION}=${rev}`,
+      revision: rev,
+    };
+  }
+  return { mode: 'out-of-mesh', reason: 'no Istio namespace labels' };
+}
+
+/**
+ * Mesh state of a pod. The pod's own spec is authoritative: an injected
+ * `istio-proxy` container means sidecar regardless of namespace labels.
+ */
+export function podMeshState(
+  pod: KubeObject | undefined | null,
+  namespace?: KubeObject | null
+): MeshState {
+  if (!pod) return { mode: 'unknown', reason: 'pod not loaded' };
+
+  const containers: Array<{ name?: string }> = (pod.jsonData as any)?.spec?.containers ?? [];
+  const hasProxy = containers.some(c => c.name === PROXY_CONTAINER);
+  const labels = labelsOf(pod) ?? {};
+  const annotations = annotationsOf(pod) ?? {};
+
+  if (hasProxy) {
+    return { mode: 'sidecar', reason: `pod has an ${PROXY_CONTAINER} container` };
+  }
+
+  const podDataplane = labels[DATAPLANE_MODE];
+  if (podDataplane === 'none') {
+    return { mode: 'out-of-mesh', reason: `pod labelled ${DATAPLANE_MODE}=none (opted out)` };
+  }
+  if (podDataplane === 'ambient') {
+    return { mode: 'ambient', reason: `pod labelled ${DATAPLANE_MODE}=ambient` };
+  }
+
+  const nsState = namespaceMeshState(namespace);
+  if (nsState.mode === 'ambient') {
+    return { mode: 'ambient', reason: nsState.reason };
+  }
+  if (nsState.mode === 'sidecar') {
+    if (
+      annotations[SIDECAR_INJECT_ANNOTATION] === 'false' ||
+      labels[SIDECAR_INJECT_ANNOTATION] === 'false'
+    ) {
+      return {
+        mode: 'out-of-mesh',
+        reason: `injection disabled on the pod (${SIDECAR_INJECT_ANNOTATION}=false)`,
+      };
+    }
+    // Namespace says inject, but this pod has no proxy -- it predates the
+    // label or was never restarted. Worth flagging rather than claiming mesh.
+    return {
+      mode: 'out-of-mesh',
+      reason: 'namespace enables injection but this pod has no sidecar (restart required?)',
+    };
+  }
+  return { mode: 'out-of-mesh', reason: nsState.reason };
+}
+
+/** A waypoint is a Gateway whose class is `istio-waypoint`. */
+export function isWaypoint(gateway: KubeObject | undefined | null): boolean {
+  return (gateway?.jsonData as any)?.spec?.gatewayClassName === WAYPOINT_GATEWAY_CLASS;
+}
+
+/** What a waypoint intercepts: `service` (default), `workload`, `all`, or `none`. */
+export function waypointFor(gateway: KubeObject): string {
+  return (labelsOf(gateway) ?? {})[WAYPOINT_FOR] ?? 'service';
+}
+
+export interface WaypointBinding {
+  /** Waypoint name, or undefined when the object opts out. */
+  name?: string;
+  namespace?: string;
+  /** Where the binding came from, for display. */
+  source: 'object' | 'namespace' | 'none';
+  /** True when `istio.io/use-waypoint=none` explicitly disables enrolment. */
+  disabled: boolean;
+}
+
+/**
+ * Resolves which waypoint an object (Service, Pod or Namespace) is enrolled
+ * with. Object-level labels win over the namespace default, and the literal
+ * value `none` opts out entirely.
+ */
+export function resolveWaypoint(
+  obj: KubeObject | undefined | null,
+  namespace: KubeObject | undefined | null
+): WaypointBinding {
+  const objLabels = labelsOf(obj) ?? {};
+  const nsLabels = labelsOf(namespace) ?? {};
+
+  const own = objLabels[USE_WAYPOINT];
+  if (own) {
+    if (own === 'none') return { source: 'object', disabled: true };
+    return {
+      name: own,
+      namespace: objLabels[USE_WAYPOINT_NAMESPACE] ?? obj?.metadata?.namespace,
+      source: 'object',
+      disabled: false,
+    };
+  }
+
+  const inherited = nsLabels[USE_WAYPOINT];
+  if (inherited) {
+    if (inherited === 'none') return { source: 'namespace', disabled: true };
+    return {
+      name: inherited,
+      namespace: nsLabels[USE_WAYPOINT_NAMESPACE] ?? namespace?.metadata?.name,
+      source: 'namespace',
+      disabled: false,
+    };
+  }
+
+  return { source: 'none', disabled: false };
+}
+
+/** Does a label selector (matchLabels only, as Istio uses) match these labels? */
+export function matchLabels(
+  selector: Record<string, string> | undefined,
+  labels: Record<string, string> | undefined
+): boolean {
+  if (!selector || Object.keys(selector).length === 0) return true;
+  if (!labels) return false;
+  return Object.entries(selector).every(([k, v]) => labels[k] === v);
+}

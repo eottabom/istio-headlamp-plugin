@@ -1,6 +1,10 @@
 import { KubeObject } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
 import {
+  APP_NAME,
   DATAPLANE_MODE,
+  GATEWAY_CLASS_NAME,
+  GATEWAY_MANAGED,
+  PART_OF,
   PROXY_CONTAINER,
   REVISION,
   SIDECAR_INJECT_ANNOTATION,
@@ -11,7 +15,7 @@ import {
   WAYPOINT_GATEWAY_CLASS,
 } from './labels';
 
-export type MeshMode = 'ambient' | 'sidecar' | 'out-of-mesh' | 'unknown';
+export type MeshMode = 'ambient' | 'sidecar' | 'infra' | 'out-of-mesh' | 'unknown';
 
 export interface MeshState {
   mode: MeshMode;
@@ -77,6 +81,11 @@ export function podMeshState(
 ): MeshState {
   if (!pod) return { mode: 'unknown', reason: 'pod not loaded' };
 
+  const infra = istioInfraRole(pod);
+  if (infra) {
+    return { mode: 'infra', reason: `${infra}, part of the Istio data plane` };
+  }
+
   const containers: Array<{ name?: string }> = (pod.jsonData as any)?.spec?.containers ?? [];
   const hasProxy = containers.some(c => c.name === PROXY_CONTAINER);
   const labels = labelsOf(pod) ?? {};
@@ -116,6 +125,29 @@ export function podMeshState(
     };
   }
   return { mode: 'out-of-mesh', reason: nsState.reason };
+}
+
+/**
+ * Istio's own components, which are data plane rather than workloads *in* the
+ * mesh. ztunnel and waypoint pods both run a container named `istio-proxy`, so
+ * container sniffing alone labels them "Sidecar" -- wrong, and it inflates the
+ * sidecar count on an ambient cluster.
+ *
+ * Note this cannot be done by checking `istio.io/dataplane-mode=none` instead:
+ * Istio stamps that same label onto genuinely sidecar-injected pods to keep
+ * them out of ambient, so that check would flip real sidecars to out-of-mesh.
+ */
+export function istioInfraRole(pod: KubeObject | undefined | null): string | undefined {
+  const labels = labelsOf(pod) ?? {};
+
+  if (labels[GATEWAY_MANAGED]) {
+    return labels[GATEWAY_CLASS_NAME] === WAYPOINT_GATEWAY_CLASS ? 'waypoint proxy' : 'Istio gateway proxy';
+  }
+  if (labels[PART_OF] === 'istio') {
+    const name = labels[APP_NAME] ?? labels['app'];
+    return name ? `Istio ${name}` : 'Istio component';
+  }
+  return undefined;
 }
 
 /** A waypoint is a Gateway whose class is `istio-waypoint`. */

@@ -33,6 +33,29 @@ HEADER = """/* eslint-disable */
 """
 
 
+def strip(obj):
+    meta = obj.get('metadata', {})
+    for key in NOISE:
+        meta.pop(key, None)
+    meta.get('annotations', {}).pop('kubectl.kubernetes.io/last-applied-configuration', None)
+    if not meta.get('annotations'):
+        meta.pop('annotations', None)
+    return obj
+
+
+def pick_pods(pods):
+    wanted = ('ztunnel', 'istiod', 'istio-cni-node', 'waypoint', 'reviews', 'orders')
+    seen, out = set(), []
+    for pod in pods:
+        name = pod['metadata']['name']
+        for key in wanted:
+            if key in name and key not in seen:
+                seen.add(key)
+                out.append(strip(pod))
+                break
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--context', default='kind-istio-dev')
@@ -46,21 +69,15 @@ def main() -> int:
             sys.exit(f'{" ".join(cmd)} failed:\n{proc.stderr}')
         return json.loads(proc.stdout)['items']
 
-    def strip(obj):
-        meta = obj.get('metadata', {})
-        for key in NOISE:
-            meta.pop(key, None)
-        meta.get('annotations', {}).pop('kubectl.kubernetes.io/last-applied-configuration', None)
-        if not meta.get('annotations'):
-            meta.pop('annotations', None)
-        return obj
-
     fixtures = {
         'namespaces': [strip(i) for i in get(['ns'])
                        if i['metadata']['name'] in ('shop', 'legacy', 'nomesh', 'istio-system')],
         'services': [strip(i) for i in get(['svc', '-n', 'shop'])],
-        'pods': [strip(i) for i in get(['pods', '-A'])
-                 if i['metadata']['namespace'] in ('shop', 'istio-system')][:6],
+        # Keep one of each interesting shape: a plain app pod, the ambient data
+        # plane (ztunnel), the control plane, and a waypoint proxy. The last two
+        # both run a container named istio-proxy, which is what makes naive
+        # container sniffing misreport them as sidecar workloads.
+        'pods': pick_pods(get(['pods', '-A'])),
     }
     for plural, key in KINDS:
         fixtures[key] = [strip(i) for i in get([plural, '-A'])]

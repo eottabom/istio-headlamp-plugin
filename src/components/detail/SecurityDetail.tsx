@@ -1,9 +1,7 @@
-import { K8s } from '@kinvolk/headlamp-plugin/lib';
 import { Link, SectionBox } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
 import { Box, Chip, Typography } from '@mui/material';
 import { ReactNode } from 'react';
-import { useMeshStatus } from '../../lib/detect';
-import { resolveWaypoint } from '../../lib/mesh';
+import { useL7Coverage } from '../../lib/l7coverage';
 import {
   AuthorizationPolicy,
   AuthorizationPolicySpec,
@@ -28,15 +26,7 @@ export function authorizationPolicyHeaderInfo(ap: AuthorizationPolicy): Row[] {
       hideIfEmpty: false,
     },
     { name: 'Rules', value: String(ap.ruleCount), hideIfEmpty: false },
-    {
-      name: 'Enforcement layer',
-      value: ap.requiresL7 ? (
-        <Chip size="small" color="warning" label="L7 — needs a waypoint" variant="outlined" />
-      ) : (
-        <Chip size="small" color="success" label="L4 — ztunnel can enforce" variant="outlined" />
-      ),
-      hideIfEmpty: false,
-    },
+    { name: 'Enforcement layer', value: <EnforcementChip policy={ap} />, hideIfEmpty: false },
     { name: 'Provider', value: ap.spec.provider?.name },
   ];
 }
@@ -58,58 +48,42 @@ export function authorizationPolicySections(ap: AuthorizationPolicy): ReactNode[
  *
  * @see https://istio.io/latest/docs/ambient/usage/l7-features/
  */
+function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
+  const coverage = useL7Coverage(policy);
+  switch (coverage.state) {
+    case 'l4':
+      return <Chip size="small" color="success" label="L4 — ztunnel can enforce" variant="outlined" />;
+    case 'sidecar':
+      return <Chip size="small" color="info" label="L7 — enforced by sidecars" variant="outlined" />;
+    case 'covered':
+      return <Chip size="small" color="success" label="L7 — enforced by waypoint" variant="outlined" />;
+    case 'uncovered':
+      return <Chip size="small" color="error" label="L7 — NOT enforced" variant="outlined" />;
+  }
+}
+
 function L7Check({ policy }: { policy: AuthorizationPolicy }) {
-  const { ambientEnabled, waypoints } = useMeshStatus();
-  const [namespaces] = K8s.ResourceClasses.Namespace.useList();
-  const [services] = K8s.ResourceClasses.Service.useList({ namespace: policy.metadata.namespace });
+  const coverage = useL7Coverage(policy);
 
-  const requirements = policy.l7Requirements;
-  if (requirements.length === 0) return null;
+  if (coverage.state === 'l4') return null;
 
-  if (!ambientEnabled) {
+  if (coverage.state === 'sidecar') {
     return (
       <ConfigWarning severity="info" title="This policy uses L7 attributes">
         <Typography variant="body2">
           Enforced by the sidecar proxies of the selected workloads. Fields requiring L7:{' '}
-          <Mono>{requirements.join(', ')}</Mono>
+          <Mono>{coverage.requirements.join(', ')}</Mono>
         </Typography>
       </ConfigWarning>
     );
   }
 
-  const ns = (namespaces ?? []).find(n => n.metadata.name === policy.metadata.namespace) ?? null;
-  const targets = policy.targetRefs;
-
-  // A targetRef pointing directly at a waypoint Gateway is already correct.
-  const targetsWaypoint = targets.some(
-    t => t.kind === 'Gateway' && waypoints.some(w => w.metadata.name === t.name)
-  );
-  if (targetsWaypoint) {
-    return (
-      <ConfigWarning severity="success" title="L7 policy attached to a waypoint">
-        <Typography variant="body2">
-          This policy targets a waypoint Gateway, so its L7 rules are enforced.
-        </Typography>
-      </ConfigWarning>
-    );
-  }
-
-  // Otherwise resolve the waypoint of the targeted Services, or the namespace.
-  const targetedServices = (services ?? []).filter(svc =>
-    targets.some(t => (t.kind ?? 'Service') === 'Service' && t.name === svc.metadata.name)
-  );
-
-  const bindings = (targetedServices.length > 0 ? targetedServices : [null]).map(svc =>
-    resolveWaypoint(svc as any, ns as any)
-  );
-  const covered = bindings.filter(b => b.name && !b.disabled);
-
-  if (covered.length === bindings.length && covered.length > 0) {
+  if (coverage.state === 'covered') {
     return (
       <ConfigWarning severity="success" title="L7 policy is covered by a waypoint">
         <Typography variant="body2">
           Traffic to the targeted workloads passes through waypoint{' '}
-          <Mono>{covered.map(b => b.name).join(', ')}</Mono>, so L7 rules are enforced.
+          <Mono>{coverage.waypoints.join(', ')}</Mono>, so L7 rules are enforced.
         </Typography>
       </ConfigWarning>
     );
@@ -122,7 +96,7 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
         found for the targets of this policy, so the following L7 conditions are silently ignored:
       </Typography>
       <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-        {requirements.map(r => (
+        {coverage.requirements.map(r => (
           <li key={r}>
             <Mono>{r}</Mono>
           </li>

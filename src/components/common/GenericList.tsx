@@ -37,10 +37,27 @@ export function GenericList({
   }
 
   return (
-    // Cells hold multi-line values (host lists, path summaries), so every
-    // column -- including the trailing actions one -- aligns to the top rather
-    // than floating in the vertical middle of a tall row.
-    <Box sx={{ pb: 6, '& td': { verticalAlign: 'top' } }}>
+    // Vertical alignment is left to Headlamp, which centres cell content.
+    //
+    // Horizontally the actions column did not line up: its header label starts
+    // at the left of the cell while the icon button sat in the middle of a
+    // 63px column, so the dots read as pushed to the right of the heading.
+    // Both now start at the same edge.
+    //
+    // The bottom padding is ours too: a plugin route renders without the
+    // padding Headlamp's own pages get, so the page ends flush against the
+    // bottom edge without it.
+    <Box
+      sx={{
+        pb: 6,
+        '& table thead th:last-of-type, & table tbody td:last-of-type': {
+          justifyContent: 'flex-start',
+        },
+        // The icon button also carries a 10px left margin, which left it
+        // sitting to the right of the heading it belongs under.
+        '& table tbody td:last-of-type .MuiIconButton-root': { marginLeft: 0 },
+      }}
+    >
       <ResourceListView
         title={title}
         resourceClass={resourceClass}

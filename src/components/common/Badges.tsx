@@ -11,6 +11,7 @@ const MESH_STYLE: Record<
 > = {
   ambient: { label: 'Ambient', color: 'success', icon: 'mdi:waves' },
   sidecar: { label: 'Sidecar', color: 'info', icon: 'mdi:car-side' },
+  infra: { label: 'Istio infra', color: 'default', icon: 'mdi:cog-outline' },
   'out-of-mesh': { label: 'Out of mesh', color: 'default', icon: 'mdi:link-variant-off' },
   unknown: { label: 'Unknown', color: 'warning', icon: 'mdi:help-circle-outline' },
 };
@@ -23,7 +24,7 @@ export function MeshBadge({ state }: { state: MeshState }) {
       <Chip
         size="small"
         color={style.color}
-        variant={state.mode === 'out-of-mesh' ? 'outlined' : 'filled'}
+        variant={state.mode === 'out-of-mesh' || state.mode === 'infra' ? 'outlined' : 'filled'}
         icon={<Icon icon={style.icon} width={16} />}
         label={style.label}
       />

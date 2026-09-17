@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hostMatchesService, parseHost, serviceFqdn } from '../lib/host';
-import { namespaceMeshState, podMeshState, resolveWaypoint } from '../lib/mesh';
+import { istioInfraRole, namespaceMeshState, podMeshState, resolveWaypoint } from '../lib/mesh';
 import { namespaces, pods, services, waypoints } from './fixtures';
 
 const ns = (name: string) => namespaces.find(n => n.metadata.name === name);
@@ -29,7 +29,58 @@ describe('namespaceMeshState', () => {
   });
 });
 
+const pod = (match: string) => pods.find(p => p.metadata.name.includes(match));
+
+describe('istioInfraRole', () => {
+  it('recognises ztunnel, which runs a container named istio-proxy', () => {
+    expect(istioInfraRole(asObj(pod('ztunnel')))).toBe('Istio ztunnel');
+  });
+
+  it('recognises a waypoint proxy by its managed-gateway labels', () => {
+    expect(istioInfraRole(asObj(pod('waypoint')))).toBe('waypoint proxy');
+  });
+
+  it('recognises the control plane and the CNI installer', () => {
+    expect(istioInfraRole(asObj(pod('istiod')))).toBe('Istio istiod');
+    expect(istioInfraRole(asObj(pod('istio-cni')))).toBe('Istio istio-cni');
+  });
+
+  it('does not claim ordinary application pods', () => {
+    expect(istioInfraRole(asObj(pod('reviews')))).toBeUndefined();
+    expect(istioInfraRole(asObj(pod('orders')))).toBeUndefined();
+  });
+});
+
 describe('podMeshState', () => {
+  // Regression: ztunnel and waypoint pods both run an `istio-proxy` container,
+  // so sniffing containers alone labelled them "Sidecar" on an ambient cluster.
+  it('classifies ztunnel as Istio infrastructure, not a sidecar workload', () => {
+    const state = podMeshState(asObj(pod('ztunnel')), asObj(ns('istio-system')));
+    expect(state.mode).toBe('infra');
+    expect(state.reason).toContain('ztunnel');
+  });
+
+  it('classifies a waypoint proxy as infrastructure, not a sidecar workload', () => {
+    const state = podMeshState(asObj(pod('waypoint')), asObj(ns('legacy')));
+    expect(state.mode).toBe('infra');
+    expect(state.reason).toContain('waypoint');
+  });
+
+  it('classifies istiod and the CNI installer as infrastructure', () => {
+    expect(podMeshState(asObj(pod('istiod')), asObj(ns('istio-system'))).mode).toBe('infra');
+    expect(podMeshState(asObj(pod('istio-cni')), asObj(ns('istio-system'))).mode).toBe('infra');
+  });
+
+  it('still reports sidecar for a real injected workload carrying dataplane-mode=none', () => {
+    // Istio stamps dataplane-mode=none onto injected pods to keep them out of
+    // ambient, so that label must not be treated as an opt-out on its own.
+    const injected = asObj({
+      metadata: { name: 'app', namespace: 'legacy', labels: { 'istio.io/dataplane-mode': 'none' } },
+      spec: { containers: [{ name: 'app' }, { name: 'istio-proxy' }] },
+    });
+    expect(podMeshState(injected, asObj(ns('legacy'))).mode).toBe('sidecar');
+  });
+
   it('reports ambient for an uninjected pod in an ambient namespace', () => {
     const pod = pods.find(p => p.metadata.namespace === 'shop');
     expect(pod).toBeDefined();

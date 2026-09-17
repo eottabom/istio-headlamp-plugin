@@ -82,13 +82,9 @@ spec:
       port: 15008
       protocol: HBONE
 ---
-# A waypoint nothing is enrolled with -- the plugin flags this.
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata: {name: orphan-waypoint, namespace: legacy}
-spec:
-  gatewayClassName: istio-waypoint
-  listeners: [{name: mesh, port: 15008, protocol: HBONE}]
+# Note: an unenrolled waypoint used to live here to exercise the "nothing is
+# enrolled with this waypoint" warning. It was noise on every page load, so the
+# case is covered by a Storybook story instead of by a permanent sample.
 ---
 # --- networking ------------------------------------------------------------
 apiVersion: networking.istio.io/v1

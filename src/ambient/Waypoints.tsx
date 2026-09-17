@@ -1,5 +1,5 @@
 import { K8s } from '@kinvolk/headlamp-plugin/lib';
-import { Link, SectionBox, SectionHeader } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
+import { Link, SectionBox } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
 import { Alert, Box, Chip, Typography } from '@mui/material';
 import { useMemo } from 'react';
 import { ChipList } from '../components/common/SpecSection';
@@ -99,9 +99,11 @@ export function WaypointsPage() {
   );
 
   return (
-    <Box sx={{ pb: 6 }}>
-      <SectionHeader title="Waypoints" />
-
+    <Box sx={{ pt: 3, pb: 6 }}>
+      {/*
+        No page-level heading here: the first section is already titled
+        "Waypoints (n)", and having both read as a duplicated heading.
+      */}
       {orphaned.length > 0 && (
         <Box sx={{ px: 2 }}>
           <Alert severity="warning">

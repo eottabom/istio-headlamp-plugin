@@ -77,13 +77,29 @@ npm run build      # production build
 npm run package    # tarball for distribution
 ```
 
-A local ambient cluster for development (the plugin needs a cluster where Istio CRDs are
-readable; many production SSO roles cannot list them):
+### Local dev cluster
+
+The plugin needs a cluster where Istio CRDs are readable; many production SSO roles cannot
+list them. `dev/kind-istio-ambient.sh` builds one: kind + Gateway API + Istio ambient, plus
+`dev/sample-istio-config.yaml`, which exercises every view — including two deliberately
+broken resources (a `STATIC` ServiceEntry with no endpoints, an L7 `AuthorizationPolicy`
+targeting a Service that opted out of its waypoint) so the warnings have something to catch.
 
 ```sh
-kind create cluster --name istio-dev
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
-istioctl install --set profile=ambient -y
+./dev/kind-istio-ambient.sh
+```
+
+### Tests
+
+The analysis that decides what the UI *claims* about a resource — which enforcement layer a
+policy needs, whether a ServiceEntry silently routes nothing, how a host string resolves —
+lives in `src/lib/analyze.ts` and `src/lib/mesh.ts` as pure functions, with no Headlamp or
+React imports. Tests run those against fixtures captured from a real Istio 1.30.1 ambient
+cluster, so they check behaviour against the shapes the API server actually returns:
+
+```sh
+npm test
+python3 scripts/capture-fixtures.py --context kind-istio-dev   # refresh fixtures
 ```
 
 ## Layout

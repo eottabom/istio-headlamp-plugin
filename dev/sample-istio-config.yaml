@@ -1,0 +1,239 @@
+# Sample config exercising every view in headlamp-istio.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    istio.io/dataplane-mode: ambient
+    istio.io/use-waypoint: shop-waypoint
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: legacy
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomesh
+---
+# --- workloads -------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: reviews, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: reviews}}
+  template:
+    metadata: {labels: {app: reviews, version: v1}}
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/e2e-test-images/agnhost:2.47
+          args: ["netexec", "--http-port=8080"]
+          ports: [{containerPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: reviews, namespace: shop}
+spec:
+  selector: {app: reviews}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: orders, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: orders}}
+  template:
+    metadata: {labels: {app: orders}}
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/e2e-test-images/agnhost:2.47
+          args: ["netexec", "--http-port=8080"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+  namespace: shop
+  labels:
+    istio.io/use-waypoint: none     # explicitly opted out of the waypoint
+spec:
+  selector: {app: orders}
+  ports: [{name: http, port: 8080}]
+---
+# --- waypoint --------------------------------------------------------------
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shop-waypoint
+  namespace: shop
+  labels:
+    istio.io/waypoint-for: service
+spec:
+  gatewayClassName: istio-waypoint
+  listeners:
+    - name: mesh
+      port: 15008
+      protocol: HBONE
+---
+# A waypoint nothing is enrolled with -- the plugin flags this.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: orphan-waypoint, namespace: legacy}
+spec:
+  gatewayClassName: istio-waypoint
+  listeners: [{name: mesh, port: 15008, protocol: HBONE}]
+---
+# --- networking ------------------------------------------------------------
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata: {name: reviews, namespace: shop}
+spec:
+  host: reviews.shop.svc.cluster.local
+  trafficPolicy:
+    loadBalancer: {simple: LEAST_REQUEST}
+    connectionPool:
+      tcp: {maxConnections: 100, connectTimeout: 3s}
+      http: {http2MaxRequests: 1000, maxRequestsPerConnection: 10, idleTimeout: 30s}
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    tls: {mode: ISTIO_MUTUAL}
+  subsets:
+    - name: v1
+      labels: {version: v1}
+    - name: canary
+      labels: {version: v2}
+      trafficPolicy:
+        loadBalancer: {simple: ROUND_ROBIN}
+        connectionPool: {http: {maxRetries: 1}}
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata: {name: reviews, namespace: shop}
+spec:
+  hosts: [reviews.shop.svc.cluster.local]
+  http:
+    - name: canary
+      match:
+        - headers: {x-env: {exact: canary}}
+          uri: {prefix: /api/}
+          method: {exact: GET}
+      route:
+        - destination: {host: reviews.shop.svc.cluster.local, subset: canary}
+          weight: 100
+      timeout: 5s
+      retries: {attempts: 3, perTryTimeout: 2s, retryOn: 5xx}
+    - name: default
+      route:
+        - destination: {host: reviews.shop.svc.cluster.local, subset: v1}
+          weight: 90
+        - destination: {host: reviews.shop.svc.cluster.local, subset: canary}
+          weight: 10
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata: {name: payments-api, namespace: shop}
+spec:
+  hosts: [payments.example.com]
+  location: MESH_EXTERNAL
+  resolution: DNS
+  ports:
+    - {number: 443, name: https, protocol: TLS}
+    - {number: 80, name: http, protocol: HTTP}
+  exportTo: ["."]
+---
+# Deliberately broken: STATIC with no endpoints. The detail page warns about it.
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata: {name: broken-static, namespace: shop}
+spec:
+  hosts: [legacy-billing.internal]
+  location: MESH_EXTERNAL
+  resolution: STATIC
+  ports: [{number: 8080, name: http, protocol: HTTP}]
+---
+apiVersion: networking.istio.io/v1
+kind: Sidecar
+metadata: {name: restrict-egress, namespace: legacy}
+spec:
+  outboundTrafficPolicy: {mode: REGISTRY_ONLY}
+  egress:
+    - hosts: ["./*", "istio-system/*"]
+---
+# --- security --------------------------------------------------------------
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata: {name: default, namespace: istio-system}
+spec:
+  mtls: {mode: STRICT}
+---
+# L7 policy attached to a service that IS behind a waypoint -> plugin shows OK.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: reviews-read-only, namespace: shop}
+spec:
+  targetRefs:
+    - kind: Service
+      group: ""
+      name: reviews
+  action: ALLOW
+  rules:
+    - from: [{source: {principals: ["cluster.local/ns/shop/sa/default"]}}]
+      to: [{operation: {methods: [GET], paths: ["/api/*"]}}]
+---
+# L7 policy on a service that opted OUT of the waypoint -> plugin flags it.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: orders-l7-unenforced, namespace: shop}
+spec:
+  targetRefs:
+    - kind: Service
+      group: ""
+      name: orders
+  action: DENY
+  rules:
+    - to: [{operation: {methods: [DELETE], paths: ["/admin/*"]}}]
+      when: [{key: "request.headers[x-admin]", values: ["true"]}]
+---
+# Pure L4 policy -> ztunnel enforces it, no warning.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata: {name: shop-l4, namespace: shop}
+spec:
+  action: ALLOW
+  rules:
+    - from: [{source: {namespaces: [shop, istio-system]}}]
+      to: [{operation: {ports: ["8080"]}}]
+---
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata: {name: jwt, namespace: shop}
+spec:
+  targetRefs: [{kind: Service, group: "", name: reviews}]
+  jwtRules:
+    - issuer: "https://accounts.example.com"
+      audiences: [shop-api]
+      jwksUri: "https://accounts.example.com/.well-known/jwks.json"
+      fromHeaders: [{name: X-Auth-Token, prefix: "Bearer "}]
+---
+# --- telemetry -------------------------------------------------------------
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata: {name: tracing, namespace: istio-system}
+spec:
+  tracing:
+    - randomSamplingPercentage: 10
+      customTags:
+        env: {literal: {value: dev}}
+  accessLogging:
+    - disabled: false
+      filter: {expression: "response.code >= 400"}

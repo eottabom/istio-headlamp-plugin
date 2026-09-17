@@ -1,3 +1,10 @@
+import {
+  collectDestinationHosts,
+  loadBalancerName,
+  serviceEntryPortSummary,
+  serviceEntryWarning,
+} from '../lib/analyze';
+import { ENVOYFILTER_VERSIONS, NETWORKING_VERSIONS, PROXYCONFIG_VERSIONS } from './apiVersions';
 import { IstioObject } from './base';
 import {
   HTTPRoute,
@@ -9,10 +16,6 @@ import {
   TrafficPolicy,
   WorkloadSelector,
 } from './types';
-
-const NET = 'networking.istio.io';
-/** Served versions as of Istio 1.30, newest first. */
-const NET_VERSIONS = [`${NET}/v1`, `${NET}/v1beta1`, `${NET}/v1alpha3`];
 
 export interface VirtualServiceSpec {
   hosts?: string[];
@@ -26,7 +29,7 @@ export interface VirtualServiceSpec {
 export class VirtualService extends IstioObject<VirtualServiceSpec> {
   static kind = 'VirtualService';
   static apiName = 'virtualservices';
-  static apiVersion = NET_VERSIONS;
+  static apiVersion = NETWORKING_VERSIONS;
   static urlSegment = 'virtualservices';
 
   get routeCount(): number {
@@ -36,16 +39,7 @@ export class VirtualService extends IstioObject<VirtualServiceSpec> {
 
   /** Every destination host referenced by any route, deduplicated. */
   get destinationHosts(): string[] {
-    const s = this.spec;
-    const hosts = new Set<string>();
-    const collect = (routes?: Array<{ route?: Array<{ destination?: { host?: string } }> }>) =>
-      routes?.forEach(r =>
-        r.route?.forEach(d => d.destination?.host && hosts.add(d.destination.host))
-      );
-    collect(s.http);
-    collect(s.tls);
-    collect(s.tcp);
-    return [...hosts];
+    return collectDestinationHosts(this.spec);
   }
 }
 
@@ -60,7 +54,7 @@ export interface DestinationRuleSpec {
 export class DestinationRule extends IstioObject<DestinationRuleSpec> {
   static kind = 'DestinationRule';
   static apiName = 'destinationrules';
-  static apiVersion = NET_VERSIONS;
+  static apiVersion = NETWORKING_VERSIONS;
   static urlSegment = 'destinationrules';
 
   get host(): string | undefined {
@@ -77,11 +71,7 @@ export class DestinationRule extends IstioObject<DestinationRuleSpec> {
   }
 
   get loadBalancer(): string | undefined {
-    const lb = this.spec.trafficPolicy?.loadBalancer;
-    if (!lb) return undefined;
-    if (lb.simple) return String(lb.simple);
-    if (lb.consistentHash) return 'CONSISTENT_HASH';
-    return undefined;
+    return loadBalancerName(this.spec.trafficPolicy?.loadBalancer);
   }
 }
 
@@ -93,7 +83,7 @@ export interface GatewaySpec {
 export class Gateway extends IstioObject<GatewaySpec> {
   static kind = 'Gateway';
   static apiName = 'gateways';
-  static apiVersion = NET_VERSIONS;
+  static apiVersion = NETWORKING_VERSIONS;
   static urlSegment = 'gateways';
 
   get serverCount(): number {
@@ -126,7 +116,7 @@ export interface ServiceEntrySpec {
 export class ServiceEntry extends IstioObject<ServiceEntrySpec> {
   static kind = 'ServiceEntry';
   static apiName = 'serviceentries';
-  static apiVersion = NET_VERSIONS;
+  static apiVersion = NETWORKING_VERSIONS;
   static urlSegment = 'serviceentries';
 
   get location(): string {
@@ -138,9 +128,7 @@ export class ServiceEntry extends IstioObject<ServiceEntrySpec> {
   }
 
   get portSummary(): string[] {
-    return (this.spec.ports ?? []).map(
-      p => [p.number, p.protocol].filter(Boolean).join('/') + (p.name ? ` (${p.name})` : '')
-    );
+    return serviceEntryPortSummary(this.spec);
   }
 
   /**
@@ -149,15 +137,7 @@ export class ServiceEntry extends IstioObject<ServiceEntrySpec> {
    * detail view.
    */
   get configWarning(): string | undefined {
-    const s = this.spec;
-    if (!s.hosts || s.hosts.length === 0) return 'No hosts defined; this entry matches nothing.';
-    if (s.resolution === 'STATIC' && (!s.endpoints || s.endpoints.length === 0)) {
-      return 'resolution is STATIC but no endpoints are defined; traffic will not be routed.';
-    }
-    if (!s.ports || s.ports.length === 0) {
-      return 'No ports defined; traffic to this host will not match any listener.';
-    }
-    return undefined;
+    return serviceEntryWarning(this.spec);
   }
 }
 
@@ -171,7 +151,7 @@ export interface SidecarSpec {
 export class Sidecar extends IstioObject<SidecarSpec> {
   static kind = 'Sidecar';
   static apiName = 'sidecars';
-  static apiVersion = NET_VERSIONS;
+  static apiVersion = NETWORKING_VERSIONS;
   static urlSegment = 'sidecars';
 
   get outboundMode(): string {
@@ -192,7 +172,7 @@ export interface WorkloadEntrySpec {
 export class WorkloadEntry extends IstioObject<WorkloadEntrySpec> {
   static kind = 'WorkloadEntry';
   static apiName = 'workloadentries';
-  static apiVersion = NET_VERSIONS;
+  static apiVersion = NETWORKING_VERSIONS;
   static urlSegment = 'workloadentries';
 }
 
@@ -205,7 +185,7 @@ export interface WorkloadGroupSpec {
 export class WorkloadGroup extends IstioObject<WorkloadGroupSpec> {
   static kind = 'WorkloadGroup';
   static apiName = 'workloadgroups';
-  static apiVersion = NET_VERSIONS;
+  static apiVersion = NETWORKING_VERSIONS;
   static urlSegment = 'workloadgroups';
 }
 
@@ -219,8 +199,7 @@ export interface ProxyConfigSpec {
 export class ProxyConfig extends IstioObject<ProxyConfigSpec> {
   static kind = 'ProxyConfig';
   static apiName = 'proxyconfigs';
-  // ProxyConfig only ever shipped v1beta1.
-  static apiVersion = [`${NET}/v1beta1`];
+  static apiVersion = PROXYCONFIG_VERSIONS;
   static urlSegment = 'proxyconfigs';
 }
 
@@ -238,8 +217,7 @@ export interface EnvoyFilterSpec {
 export class EnvoyFilter extends IstioObject<EnvoyFilterSpec> {
   static kind = 'EnvoyFilter';
   static apiName = 'envoyfilters';
-  // EnvoyFilter is deliberately pinned to v1alpha3 by Istio.
-  static apiVersion = [`${NET}/v1alpha3`];
+  static apiVersion = ENVOYFILTER_VERSIONS;
   static urlSegment = 'envoyfilters';
 
   get patchCount(): number {

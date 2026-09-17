@@ -1,5 +1,8 @@
 import { KubeObject, KubeObjectInterface } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
+import { AttachmentKind, attachmentKind, normaliseTargetRefs } from '../lib/analyze';
 import { PolicyTargetReference, WorkloadSelector } from './types';
+
+export { describeExportTo } from '../lib/analyze';
 
 /** Route prefix owned by this plugin. */
 export const ROUTE_PREFIX = '/istio';
@@ -55,11 +58,7 @@ export class IstioObject<S extends Record<string, any> = Record<string, any>> ex
 
   /** Normalised list of Gateway-API style target references. */
   get targetRefs(): PolicyTargetReference[] {
-    const spec = this.spec;
-    if (Array.isArray(spec.targetRefs) && spec.targetRefs.length > 0) {
-      return spec.targetRefs;
-    }
-    return spec.targetRef ? [spec.targetRef] : [];
+    return normaliseTargetRefs(this.spec);
   }
 
   get selectorLabels(): Record<string, string> | undefined {
@@ -71,17 +70,7 @@ export class IstioObject<S extends Record<string, any> = Record<string, any>> ex
    * usually use targetRefs; sidecar-era ones use a label selector; neither
    * means "the whole namespace" (or the whole mesh, in the root namespace).
    */
-  get attachmentKind(): 'targetRef' | 'selector' | 'namespace' {
-    if (this.targetRefs.length > 0) return 'targetRef';
-    if (this.selectorLabels && Object.keys(this.selectorLabels).length > 0) return 'selector';
-    return 'namespace';
+  get attachmentKind(): AttachmentKind {
+    return attachmentKind(this.spec);
   }
-}
-
-/** Convenience for `exportTo`, which several networking resources share. */
-export function describeExportTo(exportTo?: string[]): string {
-  if (!exportTo || exportTo.length === 0) return 'All namespaces (default)';
-  return exportTo
-    .map(v => (v === '.' ? '. (this namespace)' : v === '*' ? '* (all namespaces)' : v))
-    .join(', ');
 }

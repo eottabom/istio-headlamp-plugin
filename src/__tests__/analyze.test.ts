@@ -1,0 +1,185 @@
+import { describe, expect, it } from 'vitest';
+import {
+  attachmentKind,
+  collectDestinationHosts,
+  describeExportTo,
+  l7Requirements,
+  loadBalancerName,
+  normaliseTargetRefs,
+  serviceEntryPortSummary,
+  serviceEntryWarning,
+} from '../lib/analyze';
+import {
+  ENVOYFILTER_VERSIONS,
+  NETWORKING_VERSIONS,
+  PROXYCONFIG_VERSIONS,
+  SECURITY_VERSIONS,
+} from '../resources/apiVersions';
+import {
+  authorizationPolicies,
+  destinationRules,
+  peerAuthentications,
+  serviceEntries,
+  virtualServices,
+} from './fixtures';
+
+const spec = (items: any[], name: string) => items.find(i => i.metadata.name === name).spec;
+
+describe('API versions', () => {
+  it('cover every version the 1.30 CRDs serve, newest first', () => {
+    expect(NETWORKING_VERSIONS).toEqual([
+      'networking.istio.io/v1',
+      'networking.istio.io/v1beta1',
+      'networking.istio.io/v1alpha3',
+    ]);
+    expect(SECURITY_VERSIONS).toEqual(['security.istio.io/v1', 'security.istio.io/v1beta1']);
+    expect(ENVOYFILTER_VERSIONS).toEqual(['networking.istio.io/v1alpha3']);
+    expect(PROXYCONFIG_VERSIONS).toEqual(['networking.istio.io/v1beta1']);
+  });
+
+  it('include the apiVersion the cluster actually stored', () => {
+    expect(NETWORKING_VERSIONS).toContain(destinationRules[0].apiVersion);
+    expect(SECURITY_VERSIONS).toContain(authorizationPolicies[0].apiVersion);
+  });
+});
+
+describe('AuthorizationPolicy L4/L7 classification', () => {
+  it('flags HTTP methods and paths as needing L7', () => {
+    expect(l7Requirements(spec(authorizationPolicies, 'reviews-read-only').rules)).toEqual([
+      'rules[0].to[0].operation.methods',
+      'rules[0].to[0].operation.paths',
+    ]);
+  });
+
+  it('flags request.headers conditions as needing L7', () => {
+    const reqs = l7Requirements(spec(authorizationPolicies, 'orders-l7-unenforced').rules);
+    expect(reqs).toContain('rules[0].when[0].key = request.headers[x-admin]');
+    expect(reqs).toContain('rules[0].to[0].operation.methods');
+  });
+
+  it('treats source namespaces and ports as L4, which ztunnel enforces', () => {
+    expect(l7Requirements(spec(authorizationPolicies, 'shop-l4').rules)).toEqual([]);
+  });
+
+  it('treats JWT requestPrincipals as needing L7', () => {
+    const rules = [{ from: [{ source: { requestPrincipals: ['iss/*'] } }] }];
+    expect(l7Requirements(rules)).toEqual(['rules[0].from[0].source.requestPrincipals (JWT)']);
+  });
+
+  it('does not flag an empty or absent rule list', () => {
+    expect(l7Requirements(undefined)).toEqual([]);
+    expect(l7Requirements([{}])).toEqual([]);
+  });
+
+  it('does not flag notPorts or ipBlocks, which ztunnel handles', () => {
+    expect(
+      l7Requirements([
+        {
+          to: [{ operation: { notPorts: ['9090'] } }],
+          from: [{ source: { ipBlocks: ['10.0.0.0/8'] } }],
+        },
+      ])
+    ).toEqual([]);
+  });
+});
+
+describe('attachment', () => {
+  it('reads targetRefs on an ambient-style policy', () => {
+    const s = spec(authorizationPolicies, 'reviews-read-only');
+    expect(attachmentKind(s)).toBe('targetRef');
+    expect(normaliseTargetRefs(s)[0]).toMatchObject({ kind: 'Service', name: 'reviews' });
+  });
+
+  it('reports namespace scope when neither selector nor targetRef is set', () => {
+    expect(attachmentKind(spec(authorizationPolicies, 'shop-l4'))).toBe('namespace');
+    expect(attachmentKind(spec(peerAuthentications, 'default'))).toBe('namespace');
+  });
+
+  it('reports selector scope for a label selector', () => {
+    expect(attachmentKind({ selector: { matchLabels: { app: 'reviews' } } })).toBe('selector');
+  });
+
+  it('treats an empty selector as namespace-wide, not selector-based', () => {
+    expect(attachmentKind({ selector: { matchLabels: {} } })).toBe('namespace');
+  });
+
+  it('collapses a singular targetRef into the list form', () => {
+    expect(normaliseTargetRefs({ targetRef: { kind: 'Gateway', name: 'wp' } })).toHaveLength(1);
+    expect(
+      normaliseTargetRefs({ targetRefs: [], targetRef: { kind: 'Gateway', name: 'wp' } })
+    ).toHaveLength(1);
+  });
+});
+
+describe('ServiceEntry', () => {
+  it('summarises ports as number/protocol (name)', () => {
+    expect(serviceEntryPortSummary(spec(serviceEntries, 'payments-api'))).toEqual([
+      '443/TLS (https)',
+      '80/HTTP (http)',
+    ]);
+  });
+
+  it('accepts a well-formed DNS entry', () => {
+    expect(serviceEntryWarning(spec(serviceEntries, 'payments-api'))).toBeUndefined();
+  });
+
+  it('flags STATIC resolution with no endpoints, which silently routes nothing', () => {
+    expect(serviceEntryWarning(spec(serviceEntries, 'broken-static'))).toContain('no endpoints');
+  });
+
+  it('flags a missing host list', () => {
+    expect(serviceEntryWarning({ ports: [{ number: 80 }] })).toContain('matches nothing');
+  });
+
+  it('flags a missing port list', () => {
+    expect(serviceEntryWarning({ hosts: ['a.example.com'] })).toContain('No ports');
+  });
+});
+
+describe('VirtualService', () => {
+  it('collects destination hosts across all routes, deduplicated', () => {
+    expect(collectDestinationHosts(spec(virtualServices, 'reviews'))).toEqual([
+      'reviews.shop.svc.cluster.local',
+    ]);
+  });
+
+  it('handles a spec with no routes', () => {
+    expect(collectDestinationHosts({})).toEqual([]);
+  });
+});
+
+describe('DestinationRule', () => {
+  it('names a simple load balancer', () => {
+    expect(loadBalancerName(spec(destinationRules, 'reviews').trafficPolicy.loadBalancer)).toBe(
+      'LEAST_REQUEST'
+    );
+  });
+
+  it('names a consistent-hash load balancer', () => {
+    expect(loadBalancerName({ consistentHash: { httpHeaderName: 'x-user' } })).toBe(
+      'CONSISTENT_HASH'
+    );
+  });
+
+  it('returns undefined when unset', () => {
+    expect(loadBalancerName(undefined)).toBeUndefined();
+  });
+});
+
+describe('describeExportTo', () => {
+  it('explains the default', () => {
+    expect(describeExportTo(undefined)).toBe('All namespaces (default)');
+  });
+
+  it('expands the "." and "*" shorthands', () => {
+    expect(describeExportTo(['.'])).toBe('. (this namespace)');
+    expect(describeExportTo(['*'])).toBe('* (all namespaces)');
+    expect(describeExportTo(['prod', '.'])).toBe('prod, . (this namespace)');
+  });
+
+  it('matches the exportTo the cluster stored', () => {
+    expect(describeExportTo(spec(serviceEntries, 'payments-api').exportTo)).toBe(
+      '. (this namespace)'
+    );
+  });
+});

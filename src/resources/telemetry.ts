@@ -1,7 +1,6 @@
+import { TELEMETRY_VERSIONS } from './apiVersions';
 import { IstioObject } from './base';
 import { PolicyTargetReference, WorkloadSelector } from './types';
-
-const TEL = 'telemetry.istio.io';
 
 export interface TelemetrySpec {
   selector?: WorkloadSelector;
@@ -30,7 +29,7 @@ export interface TelemetrySpec {
 export class Telemetry extends IstioObject<TelemetrySpec> {
   static kind = 'Telemetry';
   static apiName = 'telemetries';
-  static apiVersion = [`${TEL}/v1`, `${TEL}/v1alpha1`];
+  static apiVersion = TELEMETRY_VERSIONS;
   static urlSegment = 'telemetries';
 
   /** Which of the three telemetry signals this resource configures. */

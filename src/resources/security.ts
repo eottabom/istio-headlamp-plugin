@@ -1,8 +1,7 @@
+import { l7Requirements } from '../lib/analyze';
+import { SECURITY_VERSIONS } from './apiVersions';
 import { IstioObject } from './base';
 import { AuthorizationRule, JwtRule, PolicyTargetReference, WorkloadSelector } from './types';
-
-const SEC = 'security.istio.io';
-const SEC_VERSIONS = [`${SEC}/v1`, `${SEC}/v1beta1`];
 
 export type AuthorizationAction = 'ALLOW' | 'DENY' | 'AUDIT' | 'CUSTOM' | string;
 
@@ -15,28 +14,10 @@ export interface AuthorizationPolicySpec {
   provider?: { name?: string };
 }
 
-/**
- * Attributes ztunnel can enforce on its own. Anything outside this set needs a
- * waypoint proxy to be in the request path, which is the single most common
- * ambient-mode misconfiguration.
- *
- * @see https://istio.io/latest/docs/ambient/usage/l7-features/
- */
-const L7_OPERATION_FIELDS = ['hosts', 'notHosts', 'methods', 'notMethods', 'paths', 'notPaths'];
-const L7_CONDITION_PREFIXES = [
-  'request.headers',
-  'request.auth',
-  'request.url_path',
-  'request.host',
-  'request.method',
-  'connection.sni',
-  'experimental.envoy.filters',
-];
-
 export class AuthorizationPolicy extends IstioObject<AuthorizationPolicySpec> {
   static kind = 'AuthorizationPolicy';
   static apiName = 'authorizationpolicies';
-  static apiVersion = SEC_VERSIONS;
+  static apiVersion = SECURITY_VERSIONS;
   static urlSegment = 'authorizationpolicies';
 
   get action(): AuthorizationAction {
@@ -52,29 +33,7 @@ export class AuthorizationPolicy extends IstioObject<AuthorizationPolicySpec> {
    * Empty means the policy is enforceable by ztunnel alone.
    */
   get l7Requirements(): string[] {
-    const found: string[] = [];
-    this.spec.rules?.forEach((rule, ri) => {
-      rule.to?.forEach((to, ti) => {
-        L7_OPERATION_FIELDS.forEach(field => {
-          const value = (to.operation as Record<string, unknown> | undefined)?.[field];
-          if (Array.isArray(value) && value.length > 0) {
-            found.push(`rules[${ri}].to[${ti}].operation.${field}`);
-          }
-        });
-      });
-      rule.when?.forEach((cond, ci) => {
-        const key = cond.key ?? '';
-        if (L7_CONDITION_PREFIXES.some(p => key.startsWith(p))) {
-          found.push(`rules[${ri}].when[${ci}].key = ${key}`);
-        }
-      });
-      rule.from?.forEach((from, fi) => {
-        if (from.source?.requestPrincipals?.length || from.source?.notRequestPrincipals?.length) {
-          found.push(`rules[${ri}].from[${fi}].source.requestPrincipals (JWT)`);
-        }
-      });
-    });
-    return found;
+    return l7Requirements(this.spec.rules);
   }
 
   get requiresL7(): boolean {
@@ -93,7 +52,7 @@ export interface PeerAuthenticationSpec {
 export class PeerAuthentication extends IstioObject<PeerAuthenticationSpec> {
   static kind = 'PeerAuthentication';
   static apiName = 'peerauthentications';
-  static apiVersion = SEC_VERSIONS;
+  static apiVersion = SECURITY_VERSIONS;
   static urlSegment = 'peerauthentications';
 
   get mtlsMode(): MutualTlsMode {
@@ -118,7 +77,7 @@ export interface RequestAuthenticationSpec {
 export class RequestAuthentication extends IstioObject<RequestAuthenticationSpec> {
   static kind = 'RequestAuthentication';
   static apiName = 'requestauthentications';
-  static apiVersion = SEC_VERSIONS;
+  static apiVersion = SECURITY_VERSIONS;
   static urlSegment = 'requestauthentications';
 
   get issuers(): string[] {

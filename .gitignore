@@ -6,3 +6,6 @@ dist/
 coverage/
 storybook-static/
 .gstack/
+
+# Local tooling artefacts
+.gstack/

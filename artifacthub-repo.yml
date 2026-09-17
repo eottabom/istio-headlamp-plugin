@@ -1,0 +1,9 @@
+# Proves to ArtifactHub that this repository is yours.
+#
+# repositoryID is issued by ArtifactHub when you add the repository in the
+# Control Panel; paste it here and push, and ArtifactHub will verify ownership
+# on its next scan. Until then the repository shows as unverified.
+repositoryID: REPLACE_WITH_REPOSITORY_ID
+owners:
+  - name: yukeun.oh
+    email: yukeun.oh@kurlycorp.com

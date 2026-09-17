@@ -34,11 +34,14 @@ export function SpecTable<T>({
       <Table size="small">
         <TableHead>
           <TableRow>
-            {columns.map(c => (
-              <TableCell
-                key={c.label}
-                sx={{ fontWeight: 600, width: c.width, whiteSpace: 'nowrap' }}
-              >
+            {/*
+              Keyed by position, not by label. A column's label is display text
+              and can change while the column itself does not; keying on it made
+              React treat the changed header as a different cell and leave the
+              previous one in the DOM, so the table grew extra empty columns.
+            */}
+            {columns.map((c, ci) => (
+              <TableCell key={ci} sx={{ fontWeight: 600, width: c.width, whiteSpace: 'nowrap' }}>
                 {c.label}
               </TableCell>
             ))}
@@ -47,11 +50,11 @@ export function SpecTable<T>({
         <TableBody>
           {items.map((item, i) => (
             <TableRow key={i}>
-              {columns.map(c => (
+              {columns.map((c, ci) => (
                 // Centred to match Headlamp's own resource tables; with
                 // multi-line cells, top alignment left the short columns
                 // stranded at the top of a tall row.
-                <TableCell key={c.label} sx={{ verticalAlign: 'middle' }}>
+                <TableCell key={ci} sx={{ verticalAlign: 'middle' }}>
                   {c.render(item, i)}
                 </TableCell>
               ))}

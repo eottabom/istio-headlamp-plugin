@@ -9,15 +9,20 @@ cd "$(dirname "$0")/.."
 
 npm run build
 
-DESKTOP="$HOME/.config/Headlamp/plugins/headlamp-istio"
-mkdir -p "$DESKTOP"
-cp dist/main.js package.json "$DESKTOP/"
-echo "-> $DESKTOP"
+# Copy all of dist, not just main.js: the build also emits dist/locales, and
+# leaving it behind means the plugin silently falls back to English.
+install_to() {
+  local dest="$1"
+  mkdir -p "$dest"
+  rm -rf "$dest/locales"
+  cp -R dist/. "$dest/"
+  cp package.json "$dest/"
+  echo "-> $dest"
+}
 
+install_to "$HOME/.config/Headlamp/plugins/headlamp-istio"
 for extra in "$@"; do
-  mkdir -p "$extra/headlamp-istio"
-  cp dist/main.js package.json "$extra/headlamp-istio/"
-  echo "-> $extra/headlamp-istio"
+  install_to "$extra/headlamp-istio"
 done
 
 echo

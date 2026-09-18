@@ -40,6 +40,11 @@
   "devDependencies": {
     "@kinvolk/headlamp-plugin": "^0.14.0"
   },
-  "author": "yukeun.oh",
-  "license": "Apache-2.0"
+  "author": "eottabom <snoopy12oyk@gmail.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eottabom/headlamp-istio.git"
+  },
+  "homepage": "https://github.com/eottabom/headlamp-istio"
 }

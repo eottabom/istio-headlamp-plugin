@@ -2,7 +2,7 @@
 #
 # version, archive-url and archive-checksum must agree with a published GitHub
 # release, or Headlamp's plugin catalogue will fail the integrity check on
-# install. dev/release.sh keeps all three in step; do not hand-edit them.
+# install. The Release workflow keeps all three in step; do not hand-edit them.
 version: 0.1.0
 name: headlamp_istio
 displayName: Istio
@@ -12,7 +12,7 @@ description: >-
   resource's spec without opening the editor, surfaces waypoints and namespace
   enrolment, and flags L7 authorization policies that nothing enforces.
 license: Apache-2.0
-homeURL: https://github.com/OWNER/headlamp-istio
+homeURL: https://github.com/eottabom/headlamp-istio
 logoURL: https://raw.githubusercontent.com/cncf/artwork/main/projects/istio/icon/color/istio-icon-color.svg
 keywords:
   - istio
@@ -23,13 +23,15 @@ keywords:
   - security
 links:
   - name: source
-    url: https://github.com/OWNER/headlamp-istio
+    url: https://github.com/eottabom/headlamp-istio
 maintainers:
-  - name: yukeun.oh
-    email: yukeun.oh@kurlycorp.com
+  - name: eottabom
+    email: snoopy12oyk@gmail.com
 annotations:
-  headlamp/plugin/archive-url: "https://github.com/OWNER/headlamp-istio/releases/download/v0.1.0/headlamp-istio-0.1.0.tar.gz"
+  headlamp/plugin/archive-url: "https://github.com/eottabom/headlamp-istio/releases/download/v0.1.0/headlamp-istio-0.1.0.tar.gz"
   headlamp/plugin/archive-checksum: "SHA256:REPLACE_ON_RELEASE"
-  # Registry APIs this plugin uses (registerMapSource, projects) landed in 0.23.
+  # Registry APIs this plugin uses: registerRoute, registerSidebarEntry,
+  # registerDetailsViewSection and registerResourceTableColumnsProcessor. The
+  # last of those sets the floor; the others are far older.
   headlamp/plugin/version-compat: ">=0.23"
   headlamp/plugin/distro-compat: in-cluster,web,docker-desktop,desktop

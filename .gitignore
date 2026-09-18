@@ -4,8 +4,6 @@ dist/
 *.tar.gz
 .DS_Store
 coverage/
+.eslintcache
 storybook-static/
-.gstack/
-
-# Local tooling artefacts
 .gstack/

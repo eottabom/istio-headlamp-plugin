@@ -3,10 +3,10 @@
 # version, archive-url and archive-checksum must agree with a published GitHub
 # release, or Headlamp's plugin catalogue will fail the integrity check on
 # install. The Release workflow keeps all three in step; do not hand-edit them.
-version: 0.1.2
+version: 0.1.3
 name: istio-headlamp-plugin
 displayName: Istio
-createdAt: "2026-09-18T13:24:04Z"
+createdAt: "2026-09-18T13:29:20Z"
 description: >-
   Istio service mesh UI with first-class ambient mode support. Shows every
   resource's spec without opening the editor, surfaces waypoints and namespace
@@ -48,7 +48,7 @@ install: |
   Unpack the release tarball into Headlamp's plugin directory:
 
   ```sh
-  VERSION=0.1.2
+  VERSION=0.1.3
   mkdir -p ~/.config/Headlamp/plugins
   curl -fsSL "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz" \
     | tar xz -C ~/.config/Headlamp/plugins
@@ -77,8 +77,8 @@ install: |
   Namespaces, Services, Pods, Deployments and DaemonSets. Views that cannot read something
   say so rather than guessing.
 annotations:
-  headlamp/plugin/archive-url: "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.2/istio-headlamp-plugin-0.1.2.tar.gz"
-  headlamp/plugin/archive-checksum: "SHA256:80385aaad03295a749f5979f8b84c64fd99e1bdcdc5c53b253232b652aaff3f9"
+  headlamp/plugin/archive-url: "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.3/istio-headlamp-plugin-0.1.3.tar.gz"
+  headlamp/plugin/archive-checksum: "SHA256:b28961b55cdf3b8f950703cfd80423de3d2362ef3449669f278be0fb09be76e8"
   # Registry APIs this plugin uses: registerRoute, registerSidebarEntry,
   # registerDetailsViewSection and registerResourceTableColumnsProcessor. The
   # last of those sets the floor; the others are far older.

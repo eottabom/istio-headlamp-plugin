@@ -30,7 +30,7 @@ Open **Plugins** in the Headlamp sidebar, find **Istio**, and install it. The pa
 ### From a release tarball
 
 ```sh
-VERSION=0.1.2
+VERSION=0.1.3
 mkdir -p ~/.config/Headlamp/plugins
 curl -fsSL "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz" \
   | tar xz -C ~/.config/Headlamp/plugins

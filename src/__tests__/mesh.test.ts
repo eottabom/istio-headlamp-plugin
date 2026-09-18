@@ -193,6 +193,31 @@ describe('hostMatchesService', () => {
     expect(hostMatchesService('*.shop.svc.cluster.local', 'reviews', 'shop')).toBe(true);
   });
 
+  // The `ns/host` form Sidecar egress uses restricts which namespace the host
+  // may resolve in. Stripping the prefix instead of honouring it made a host
+  // scoped to one namespace match Services in every namespace.
+  it('honours a namespace scope that matches', () => {
+    expect(hostMatchesService('shop/*.shop.svc.cluster.local', 'reviews', 'shop')).toBe(true);
+  });
+
+  it('rejects a host scoped to a different namespace', () => {
+    expect(hostMatchesService('other/*.shop.svc.cluster.local', 'reviews', 'shop')).toBe(false);
+    expect(hostMatchesService('other/reviews.shop.svc.cluster.local', 'reviews', 'shop')).toBe(
+      false
+    );
+  });
+
+  it('treats the "*" scope as any namespace', () => {
+    expect(hostMatchesService('*/reviews.shop.svc.cluster.local', 'reviews', 'shop')).toBe(true);
+  });
+
+  it('resolves the "." scope against the namespace declaring the host', () => {
+    expect(hostMatchesService('./reviews', 'reviews', 'shop', 'shop')).toBe(true);
+    expect(hostMatchesService('./reviews.shop.svc.cluster.local', 'reviews', 'shop', 'other')).toBe(
+      false
+    );
+  });
+
   it('builds the canonical FQDN', () => {
     expect(serviceFqdn('reviews', 'shop')).toBe('reviews.shop.svc.cluster.local');
   });

@@ -117,11 +117,31 @@ export function hostMatchesService(
   if (host === '*') return true;
 
   const parsed = parseHost(host, hostNamespace);
+  if (!scopeMatches(parsed.scope, serviceNamespace, hostNamespace)) return false;
+
   if (parsed.isWildcard) {
     const suffix = parsed.raw.replace(/^[^/]*\//, '').slice(1); // drop scope and leading '*'
     return `${serviceName}.${serviceNamespace}${CLUSTER_SUFFIX}`.endsWith(suffix);
   }
   return parsed.serviceName === serviceName && parsed.namespace === serviceNamespace;
+}
+
+/**
+ * The `ns/` prefix of a Sidecar egress host restricts which namespace the host
+ * may resolve in, so it has to be honoured rather than stripped: without this,
+ * `prod/*` matched Services in every namespace.
+ *
+ * `*` is any namespace and `.` is the namespace of the resource declaring the
+ * host, which are the two forms Istio gives special meaning.
+ */
+function scopeMatches(
+  scope: string | undefined,
+  serviceNamespace: string,
+  hostNamespace?: string
+): boolean {
+  if (!scope || scope === '*') return true;
+  if (scope === '.') return serviceNamespace === hostNamespace;
+  return scope === serviceNamespace;
 }
 
 /** Canonical `name.namespace.svc.cluster.local` for a Service. */

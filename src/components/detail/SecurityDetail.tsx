@@ -54,9 +54,13 @@ function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
   const coverage = useL7Coverage(policy);
   switch (coverage.state) {
     case 'l4':
-      return <Chip size="small" color="success" label="L4 — ztunnel can enforce" variant="outlined" />;
+      return (
+        <Chip size="small" color="success" label="L4 — ztunnel can enforce" variant="outlined" />
+      );
     case 'sidecar':
-      return <Chip size="small" color="info" label="L7 — enforced by sidecars" variant="outlined" />;
+      return (
+        <Chip size="small" color="info" label="L7 — enforced by sidecars" variant="outlined" />
+      );
     case 'covered':
       return (
         <Chip
@@ -104,10 +108,10 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
 
   if (coverage.state === 'dangling') {
     return (
-      <ConfigWarning severity="error" title="Target Gateway not found">
+      <ConfigWarning severity="error" title={`Target ${coverage.targetKind} not found`}>
         <Typography variant="body2">
-          This policy attaches to <Mono>{coverage.missing.join(', ')}</Mono>, which does not exist in
-          this cluster. Nothing enforces it until that Gateway is created.
+          This policy attaches to <Mono>{coverage.missing.join(', ')}</Mono>, which does not exist
+          in this cluster. Nothing enforces it until that {coverage.targetKind} is created.
         </Typography>
       </ConfigWarning>
     );
@@ -210,7 +214,10 @@ function RulesTable({ rules }: { rules: AuthorizationRule[] }) {
         emptyText={`No rule mentions "${trimmed}".`}
         columns={[
           { label: '#', render: ({ index }) => <Mono>{index}</Mono>, width: '3rem' },
-          { label: 'From (source)', render: ({ rule }) => <RuleSourceCell rule={rule} filter={trimmed} /> },
+          {
+            label: 'From (source)',
+            render: ({ rule }) => <RuleSourceCell rule={rule} filter={trimmed} />,
+          },
           {
             label: 'To (operation)',
             render: ({ rule }) => <RuleOperationCell rule={rule} filter={trimmed} />,

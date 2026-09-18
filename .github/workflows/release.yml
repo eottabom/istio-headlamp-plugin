@@ -78,36 +78,24 @@ jobs:
           echo "tarball=$tarball" >>"$GITHUB_OUTPUT"
           echo "checksum=$(sha256sum "$tarball" | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
 
-      - name: Write the package manifest for this version
+      - name: Update artifacthub-pkg.yml
         env:
           VERSION: ${{ inputs.version }}
           TARBALL: ${{ steps.package.outputs.tarball }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
         run: |
-          # ArtifactHub reads one artifacthub-pkg.yml per version directory, not
-          # a single file at the root: a manifest sitting beside
-          # artifacthub-repo.yml is never found, and the repository stays
-          # "not processed yet" however often the tracker runs. Keeping the old
-          # directories is what gives the catalogue its version history.
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${TARBALL}"
-          previous=$(ls -d [0-9]*.[0-9]*.[0-9]*/ 2>/dev/null | sort -V | tail -1)
-          test -n "$previous" || { echo "no existing version directory to copy from"; exit 1; }
-
-          mkdir -p "$VERSION"
-          cp "${previous}artifacthub-pkg.yml" "$VERSION/artifacthub-pkg.yml"
-          cp README.md "$VERSION/README.md"
-
           python3 - "$VERSION" "$url" "$CHECKSUM" <<'PY'
           import re, sys
           from datetime import datetime, timezone
 
           version, url, checksum = sys.argv[1:4]
-          path = f'{version}/artifacthub-pkg.yml'
+          path = 'artifacthub-pkg.yml'
           s = open(path).read()
           s = re.sub(r'^version: .*$', f'version: {version}', s, count=1, flags=re.M)
-          # createdAt is per version. Copied forward unchanged it pins every
-          # release to the date the first manifest was written, which is what
-          # the catalogue prints as "updated".
+          # createdAt is what the catalogue prints as the update date, so it has
+          # to move with the release rather than stay at the date the manifest
+          # was first written.
           s = re.sub(
               r'^createdAt: .*$',
               f'createdAt: "{datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}"',
@@ -132,7 +120,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json "${VERSION}"
+          git add package.json package-lock.json artifacthub-pkg.yml
           # Nothing to commit when re-releasing an identical tree; the tag and
           # the release still need to happen.
           git diff --cached --quiet || git commit -m "release: v${VERSION}"

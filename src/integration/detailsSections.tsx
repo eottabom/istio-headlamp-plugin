@@ -9,7 +9,7 @@ import { useMeshStatus } from '../lib/detect';
 import { hostMatchesService } from '../lib/host';
 import { USE_WAYPOINT } from '../lib/labels';
 import { namespaceMeshState, podMeshState, resolveWaypoint } from '../lib/mesh';
-import { IstioObject, ROUTE_PREFIX } from '../resources/base';
+import { detailRouteName, IstioObject } from '../resources/base';
 import { DestinationRule, ServiceEntry, VirtualService } from '../resources/networking';
 import { AuthorizationPolicy, PeerAuthentication } from '../resources/security';
 
@@ -22,9 +22,12 @@ import { AuthorizationPolicy, PeerAuthentication } from '../resources/security';
  * grepping kubectl output across four resource kinds.
  */
 
-function istioLink(resource: IstioObject) {
+function istioRoute(resource: IstioObject) {
   const cls = resource.constructor as any;
-  return `${ROUTE_PREFIX}/${cls.urlSegment}/${resource.metadata.namespace}/${resource.metadata.name}`;
+  return {
+    routeName: detailRouteName(cls.urlSegment),
+    params: { namespace: resource.metadata.namespace, name: resource.metadata.name },
+  };
 }
 
 function ResourceLinks({ items }: { items: IstioObject[] }) {
@@ -38,7 +41,7 @@ function ResourceLinks({ items }: { items: IstioObject[] }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
       {items.map(i => (
-        <Link key={i.metadata.uid} routeName={istioLink(i)}>
+        <Link key={i.metadata.uid} {...istioRoute(i)}>
           <Mono>
             {i.metadata.namespace}/{i.metadata.name}
           </Mono>

@@ -8,6 +8,23 @@ export { describeExportTo } from '../lib/analyze';
 export const ROUTE_PREFIX = '/istio';
 
 /**
+ * Names the plugin's routes are registered under.
+ *
+ * Headlamp's `Link` resolves `routeName` against registered route *names* (or
+ * the unsubstituted path pattern), never against a concrete URL, so anything
+ * linking to an Istio page has to go through these rather than building the
+ * path by hand. Both the registration and the links derive from here so the
+ * two cannot drift apart.
+ */
+export function listRouteName(urlSegment: string): string {
+  return `istio-${urlSegment}`;
+}
+
+export function detailRouteName(urlSegment: string): string {
+  return `${listRouteName(urlSegment)}-detail`;
+}
+
+/**
  * Every Istio CR shares the same "how is this attached to workloads" question.
  * `selector` is the classic sidecar-era mechanism, `targetRef(s)` is the
  * Gateway-API style mechanism that ambient mode leans on.

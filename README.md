@@ -65,9 +65,9 @@ Deployments and DaemonSets. Views that cannot read something say so rather than 
 ## Features
 
 Every Istio resource gets its own entry in the sidebar, and only for CRDs the cluster
-actually has. Laid out in columns here; in Headlamp it is one list under **Istio**.
+actually has.
 
-![Istio section of the Headlamp sidebar](docs/images/sidebar.png)
+<img src="docs/images/sidebar.png" alt="Istio section of the Headlamp sidebar" width="260">
 
 ### Spec-first detail views
 

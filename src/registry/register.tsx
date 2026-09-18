@@ -15,7 +15,7 @@ import {
   ServiceIstioSection,
 } from '../integration/detailsSections';
 import { meshColumnsProcessor } from '../integration/tableColumns';
-import { ROUTE_PREFIX } from '../resources/base';
+import { detailRouteName, listRouteName, ROUTE_PREFIX } from '../resources/base';
 import { ISTIO_GROUPS, ISTIO_RESOURCES, IstioResourceDef } from './resources';
 
 const ROOT = 'istio';
@@ -101,11 +101,11 @@ export function registerIstioPlugin() {
 }
 
 function registerResource(def: IstioResourceDef, parent: string) {
-  const listRouteName = `istio-${def.id}`;
-  const detailRouteName = `istio-${def.id}-detail`;
+  const listRoute = listRouteName(def.id);
+  const detailRoute = detailRouteName(def.id);
 
   registerSidebarEntry({
-    name: listRouteName,
+    name: listRoute,
     label: def.pluralLabel,
     icon: def.icon,
     url: `${ROUTE_PREFIX}/${def.id}`,
@@ -115,8 +115,8 @@ function registerResource(def: IstioResourceDef, parent: string) {
   registerRoute({
     path: `${ROUTE_PREFIX}/${def.id}`,
     exact: true,
-    name: listRouteName,
-    sidebar: { item: listRouteName, sidebar: 'IN-CLUSTER' },
+    name: listRoute,
+    sidebar: { item: listRoute, sidebar: 'IN-CLUSTER' },
     component: () => (
       <GenericList
         id={`istio-${def.id}`}
@@ -131,8 +131,8 @@ function registerResource(def: IstioResourceDef, parent: string) {
   registerRoute({
     path: `${ROUTE_PREFIX}/${def.id}/:namespace/:name`,
     exact: true,
-    name: detailRouteName,
-    sidebar: { item: listRouteName, sidebar: 'IN-CLUSTER' },
+    name: detailRoute,
+    sidebar: { item: listRoute, sidebar: 'IN-CLUSTER' },
     component: () => (
       <GenericDetail
         resourceClass={def.cls}

@@ -114,13 +114,18 @@ jobs:
           open(path, 'w').write(s)
           PY
 
+          # The install instructions pin a version in a shell snippet. Left
+          # alone they keep telling people to download the previous release.
+          sed -i -E "s/^([[:space:]]*)VERSION=[0-9]+\.[0-9]+\.[0-9]+$/\1VERSION=${VERSION}/" \
+            artifacthub-pkg.yml README.md
+
       - name: Commit, tag and push
         env:
           VERSION: ${{ inputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json artifacthub-pkg.yml
+          git add package.json package-lock.json artifacthub-pkg.yml README.md
           # Nothing to commit when re-releasing an identical tree; the tag and
           # the release still need to happen.
           git diff --cached --quiet || git commit -m "release: v${VERSION}"

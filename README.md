@@ -18,7 +18,56 @@ Waypoints, ztunnel, `istio-cni`, namespace enrolment and the L4/L7 split are sur
 directly, including the case where an L7 `AuthorizationPolicy` reaches ztunnel instead of a
 waypoint and fails closed, denying the traffic it was meant to filter.
 
+![Mesh Overview](docs/images/mesh-overview.png)
+
+## Install
+
+### From Headlamp
+
+Open **Plugins** in the Headlamp sidebar, find **Istio**, and install it. The package is on
+[Artifact Hub](https://artifacthub.io/packages/search?repo=istio-headlamp-plugin).
+
+### From a release tarball
+
+```sh
+VERSION=0.1.1
+mkdir -p ~/.config/Headlamp/plugins
+curl -fsSL "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz" \
+  | tar xz -C ~/.config/Headlamp/plugins
+```
+
+Every version is on the
+[releases page](https://github.com/eottabom/istio-headlamp-plugin/releases).
+
+For Headlamp in a container, unpack into the directory it serves plugins from and start it
+with `-plugins-dir=/headlamp/plugins`.
+
+### From source
+
+```sh
+git clone https://github.com/eottabom/istio-headlamp-plugin.git
+cd istio-headlamp-plugin
+npm install
+npm run build
+npm run package     # produces istio-headlamp-plugin-<version>.tar.gz
+```
+
+`npm run build` writes `dist/`, which is the plugin itself: copy `dist/` and `package.json`
+into a directory named after the plugin under Headlamp's plugins directory. `dev/deploy.sh`
+does this for the desktop app and any mounted path at once.
+
+### What it needs to read
+
+The Istio CRDs (`networking.istio.io`, `security.istio.io`, `telemetry.istio.io`,
+`extensions.istio.io`), Gateway API `Gateway` objects, and Namespaces, Services, Pods,
+Deployments and DaemonSets. Views that cannot read something say so rather than guessing.
+
 ## Features
+
+Every Istio resource gets its own entry in the sidebar, and only for CRDs the cluster
+actually has.
+
+<img src="docs/images/sidebar.png" alt="Istio section of the Headlamp sidebar" width="240">
 
 ### Spec-first detail views
 
@@ -37,11 +86,14 @@ waypoint and fails closed, denying the traffic it was meant to filter.
 
 ![DestinationRule detail](docs/images/destinationrule.png)
 
+Lists carry the fields that make a resource identifiable, so a page of policies is readable
+without opening any of them.
+
+![AuthorizationPolicy list](docs/images/authorizationpolicies.png)
+
 Every page ends with a **Full spec** section, so nothing in the resource is ever hidden.
 
 ### Ambient mode
-
-![Mesh Overview](docs/images/mesh-overview.png)
 
 - **Mesh Overview**: control-plane version, ztunnel and `istio-cni` DaemonSet health,
   ambient vs sidecar namespace counts, installed Istio APIs.
@@ -69,6 +121,8 @@ Every page ends with a **Full spec** section, so nothing in the resource is ever
   `Out of mesh` column.
 
 ![Waypoints](docs/images/waypoints.png)
+
+![Mesh column on the Pod list](docs/images/pods-mesh-column.png)
 
 ### Istio context on built-in pages
 

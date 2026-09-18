@@ -48,12 +48,19 @@ install: |
   Unpack the release tarball into Headlamp's plugin directory:
 
   ```sh
+  VERSION=0.1.1
   mkdir -p ~/.config/Headlamp/plugins
-  curl -fsSL <archive-url> | tar xz -C ~/.config/Headlamp/plugins
+  curl -fsSL "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz" \
+    | tar xz -C ~/.config/Headlamp/plugins
   ```
 
-  The archive URL for each version is on the
-  [releases page](https://github.com/eottabom/istio-headlamp-plugin/releases).
+  ### From source
+
+  ```sh
+  git clone https://github.com/eottabom/istio-headlamp-plugin.git
+  cd istio-headlamp-plugin
+  npm install && npm run build && npm run package
+  ```
 
   ### Headlamp in a cluster or container
 

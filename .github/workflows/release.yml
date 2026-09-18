@@ -1,5 +1,8 @@
 name: Release
 
+# Without this the Actions list shows a row of identical "Release" runs.
+run-name: Release v${{ inputs.version }}
+
 on:
   workflow_dispatch:
     inputs:

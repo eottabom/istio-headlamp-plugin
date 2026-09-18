@@ -3,7 +3,7 @@
 # repositoryID is issued by ArtifactHub when you add the repository in the
 # Control Panel; paste it here and push, and ArtifactHub will verify ownership
 # on its next scan. Until then the repository shows as unverified.
-repositoryID: REPLACE_WITH_REPOSITORY_ID
+repositoryID: 460b2907-ef4e-4cc1-abbe-db9a367f4931
 owners:
   - name: eottabom
     email: snoopy12oyk@gmail.com

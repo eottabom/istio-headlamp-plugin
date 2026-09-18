@@ -1,113 +1,28 @@
 import { K8s } from '@kinvolk/headlamp-plugin/lib';
 import { useMeshStatus } from './detect';
-import { resolveWaypoint } from './mesh';
+import { L7Subject, resolveL7Coverage } from './l7decision';
+
+export type { L7Coverage, L7Inputs, L7Subject } from './l7decision';
+export { resolveL7Coverage } from './l7decision';
 
 /**
- * Whether an AuthorizationPolicy's L7 rules are actually enforced.
- *
- * Shared by the header chip and the detail section so the two can never
- * disagree: deriving the chip from `requiresL7` alone said "needs a waypoint"
- * even when a waypoint was present, directly contradicting the section below it.
+ * Reads what the decision needs out of the cluster and hands it to
+ * {@link resolveL7Coverage}. The judgement itself lives in a module with no
+ * Headlamp imports, so it can be tested against the failure cases.
  */
-export type L7Coverage =
-  | { state: 'l4'; requirements: [] }
-  | { state: 'sidecar'; requirements: string[] }
-  /** A waypoint or an ingress/egress gateway terminates L7 for these targets. */
-  | { state: 'covered'; requirements: string[]; via: string[]; through: 'waypoint' | 'gateway' }
-  /** targetRefs name an object that does not exist, so nothing is enforced. */
-  | { state: 'dangling'; requirements: string[]; missing: string[]; targetKind: string }
-  | { state: 'uncovered'; requirements: string[] };
+export function useL7Coverage(policy: L7Subject) {
+  const { ambientEnabled, waypoints, gateways, loading } = useMeshStatus();
+  const [namespaces, namespacesError] = K8s.ResourceClasses.Namespace.useList();
+  const [services, servicesError] = K8s.ResourceClasses.Service.useList({
+    namespace: policy.metadata.namespace,
+  });
 
-export interface L7Subject {
-  metadata: { namespace?: string };
-  l7Requirements: string[];
-  targetRefs: Array<{ kind?: string; name?: string; namespace?: string }>;
-}
-
-export function useL7Coverage(policy: L7Subject): L7Coverage {
-  const { ambientEnabled, waypoints, gateways } = useMeshStatus();
-  const [namespaces] = K8s.ResourceClasses.Namespace.useList();
-  const [services] = K8s.ResourceClasses.Service.useList({ namespace: policy.metadata.namespace });
-
-  const requirements = policy.l7Requirements;
-  if (requirements.length === 0) return { state: 'l4', requirements: [] };
-
-  // Sidecars handle L7 themselves, so the question does not arise.
-  if (!ambientEnabled) return { state: 'sidecar', requirements };
-
-  const targets = policy.targetRefs;
-  const policyNs = policy.metadata.namespace;
-
-  // A targetRef pointing at a Gateway is enforced by that Gateway's proxy.
-  //
-  // Both kinds count: a waypoint, and an ingress/egress gateway. A gateway is a
-  // full Envoy doing L7 in its own right, so requiring a waypoint there raised
-  // a false "not enforced" alarm on perfectly good ext-authz policies.
-  const gatewayTargets = targets.filter(t => (t.kind ?? '') === 'Gateway');
-  if (gatewayTargets.length > 0) {
-    const matched = gateways.filter(g =>
-      gatewayTargets.some(
-        t => t.name === g.metadata.name && (t.namespace ?? policyNs) === g.metadata.namespace
-      )
-    );
-    if (matched.length > 0) {
-      const allWaypoints = matched.every(g =>
-        waypoints.some(w => w.metadata.uid === g.metadata.uid)
-      );
-      return {
-        state: 'covered',
-        requirements,
-        via: matched.map(g => g.metadata.name),
-        through: allWaypoints ? 'waypoint' : 'gateway',
-      };
-    }
-    return {
-      state: 'dangling',
-      requirements,
-      missing: gatewayTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
-      targetKind: 'Gateway',
-    };
-  }
-
-  const ns = (namespaces ?? []).find(n => n.metadata.name === policyNs) ?? null;
-
-  // Namespace matters as much as name here: the Service list is scoped to the
-  // policy's own namespace, so matching on name alone let a targetRef pointing
-  // at `other-ns/reviews` bind to the local `reviews` and report its waypoint.
-  const serviceTargets = targets.filter(t => (t.kind ?? 'Service') === 'Service');
-  const targetedServices = (services ?? []).filter(svc =>
-    serviceTargets.some(
-      t => t.name === svc.metadata.name && (t.namespace ?? policyNs) === svc.metadata.namespace
-    )
-  );
-
-  // Service targetRefs that resolve to nothing bind to nothing. Falling through
-  // to the namespace-wide branch below reported the namespace default waypoint
-  // as covering a policy that waypoint never sees. `services === null` is the
-  // list still loading, which is not the same as the target being absent.
-  if (serviceTargets.length > 0 && targetedServices.length === 0 && services !== null) {
-    return {
-      state: 'dangling',
-      requirements,
-      missing: serviceTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
-      targetKind: 'Service',
-    };
-  }
-
-  // With no Service targetRefs the policy is namespace-wide, so the namespace
-  // default waypoint is what decides.
-  const bindings = (targetedServices.length > 0 ? targetedServices : [null]).map(svc =>
-    resolveWaypoint(svc as any, ns as any)
-  );
-  const covered = bindings.filter(b => b.name && !b.disabled);
-
-  if (covered.length > 0 && covered.length === bindings.length) {
-    return {
-      state: 'covered',
-      requirements,
-      via: [...new Set(covered.map(b => b.name as string))],
-      through: 'waypoint',
-    };
-  }
-  return { state: 'uncovered', requirements };
+  return resolveL7Coverage(policy, {
+    ambientEnabled,
+    loading,
+    waypoints,
+    gateways,
+    namespaces: namespacesError ? null : namespaces,
+    services: servicesError ? null : services,
+  });
 }

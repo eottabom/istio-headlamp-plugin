@@ -219,6 +219,8 @@ export interface ServiceEntryLike {
   ports?: Array<{ number?: number; protocol?: string; name?: string }>;
   resolution?: string;
   endpoints?: unknown[];
+  /** Selects Pods or WorkloadEntries in place of inline endpoints. */
+  workloadSelector?: WorkloadSelector;
 }
 
 /** `443/TLS (https)` style summaries for the list and header views. */
@@ -236,8 +238,16 @@ export function serviceEntryWarning(spec: ServiceEntryLike | undefined): string 
   if (!spec?.hosts || spec.hosts.length === 0) {
     return 'No hosts defined; this entry matches nothing.';
   }
-  if (spec.resolution === 'STATIC' && (!spec.endpoints || spec.endpoints.length === 0)) {
-    return 'resolution is STATIC but no endpoints are defined; traffic will not be routed.';
+  // workloadSelector is the other half of STATIC: it picks up Pods and
+  // WorkloadEntries by label instead of listing addresses inline. Warning on it
+  // flagged a perfectly ordinary VM-onboarding config as broken.
+  const hasSelector = Object.keys(spec.workloadSelector?.matchLabels ?? {}).length > 0;
+  if (
+    spec.resolution === 'STATIC' &&
+    !hasSelector &&
+    (!spec.endpoints || spec.endpoints.length === 0)
+  ) {
+    return 'resolution is STATIC with neither endpoints nor a workloadSelector; traffic will not be routed.';
   }
   if (!spec.ports || spec.ports.length === 0) {
     return 'No ports defined; traffic to this host will not match any listener.';

@@ -126,7 +126,33 @@ describe('ServiceEntry', () => {
   });
 
   it('flags STATIC resolution with no endpoints, which silently routes nothing', () => {
-    expect(serviceEntryWarning(spec(serviceEntries, 'broken-static'))).toContain('no endpoints');
+    expect(serviceEntryWarning(spec(serviceEntries, 'broken-static'))).toContain(
+      'neither endpoints nor a workloadSelector'
+    );
+  });
+
+  // A STATIC entry can pick its backends up by label instead of listing them,
+  // which is the ordinary shape for onboarding VMs through WorkloadEntries.
+  it('accepts STATIC resolution backed by a workloadSelector', () => {
+    expect(
+      serviceEntryWarning({
+        hosts: ['vm.internal'],
+        ports: [{ number: 8080, protocol: 'HTTP' }],
+        resolution: 'STATIC',
+        workloadSelector: { matchLabels: { app: 'legacy-vm' } },
+      })
+    ).toBeUndefined();
+  });
+
+  it('still flags STATIC with an empty workloadSelector', () => {
+    expect(
+      serviceEntryWarning({
+        hosts: ['vm.internal'],
+        ports: [{ number: 8080, protocol: 'HTTP' }],
+        resolution: 'STATIC',
+        workloadSelector: { matchLabels: {} },
+      })
+    ).toContain('neither endpoints nor a workloadSelector');
   });
 
   it('flags a missing host list', () => {

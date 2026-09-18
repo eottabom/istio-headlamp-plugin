@@ -43,6 +43,13 @@ function annotationsOf(obj: KubeObject | undefined | null): Labels {
  * namespace level we report the ambiguity rather than guessing.
  */
 export function namespaceMeshState(ns: KubeObject | undefined | null): MeshState {
+  // A namespace we could not read is not a namespace without labels. Plenty of
+  // accounts cannot list namespaces cluster-wide, and reporting those
+  // workloads as out of the mesh is a confident answer drawn from nothing.
+  if (!ns) {
+    return { mode: 'unknown', reason: 'namespace not readable (still loading, or not permitted)' };
+  }
+
   const labels = labelsOf(ns) ?? {};
   const dataplane = labels[DATAPLANE_MODE];
   const injection = labels[SIDECAR_INJECTION];
@@ -104,6 +111,11 @@ export function podMeshState(
   }
 
   const nsState = namespaceMeshState(namespace);
+  if (nsState.mode === 'unknown') {
+    // The pod itself said nothing and the namespace is unreadable, so the only
+    // honest answer is that we do not know.
+    return { mode: 'unknown', reason: nsState.reason };
+  }
   if (nsState.mode === 'ambient') {
     return { mode: 'ambient', reason: nsState.reason };
   }

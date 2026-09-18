@@ -1,5 +1,8 @@
 # istio-headlamp-plugin
 
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/istio-headlamp-plugin)](https://artifacthub.io/packages/search?repo=istio-headlamp-plugin)
+[![CI](https://github.com/eottabom/istio-headlamp-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/eottabom/istio-headlamp-plugin/actions/workflows/ci.yml)
+
 An Istio service mesh plugin for [Headlamp](https://headlamp.dev), built around two things
 existing Istio UIs in Headlamp do not do:
 
@@ -32,9 +35,13 @@ waypoint and fails closed, denying the traffic it was meant to filter.
 | `WasmPlugin` | URL, phase, priority and plugin config |
 | `Sidecar`, `WorkloadEntry`, `WorkloadGroup`, `ProxyConfig`, `EnvoyFilter`, `TrafficExtension` | Typed header fields plus the full spec renderer |
 
+![DestinationRule detail](docs/images/destinationrule.png)
+
 Every page ends with a **Full spec** section, so nothing in the resource is ever hidden.
 
 ### Ambient mode
+
+![Mesh Overview](docs/images/mesh-overview.png)
 
 - **Mesh Overview**: control-plane version, ztunnel and `istio-cni` DaemonSet health,
   ambient vs sidecar namespace counts, installed Istio APIs.
@@ -53,8 +60,15 @@ Every page ends with a **Full spec** section, so nothing in the resource is ever
   checked against the Gateways that exist, because a typo in that label otherwise reads as
   full coverage. When the mesh state, Services or Namespaces cannot be read, the page says
   it cannot determine enforcement instead of assuming.
+
+  ![L7 enforcement check](docs/images/l7-enforcement.png)
+
+  Above: a `DENY` policy with HTTP conditions, attached by `targetRef` to a Service that opted
+  out of its waypoint. ztunnel ends up enforcing it, cannot evaluate the conditions, and denies.
 - **Mesh column**: Headlamp's own Pod and workload lists gain an `Ambient` / `Sidecar` /
   `Out of mesh` column.
+
+![Waypoints](docs/images/waypoints.png)
 
 ### Istio context on built-in pages
 
@@ -65,6 +79,8 @@ Istio sections are injected into Headlamp's own resource views:
 - **Pod** → mesh state with the reason, proxy image, waypoint.
 - **Namespace** → dataplane mode, default waypoint, and the *effective* mTLS mode resolved
   from namespace and mesh-wide `PeerAuthentication`.
+
+![Istio section on a Service page](docs/images/service-context.png)
 
 ## Compatibility
 

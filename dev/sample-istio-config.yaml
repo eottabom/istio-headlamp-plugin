@@ -186,10 +186,11 @@ spec:
     - from: [{source: {principals: ["cluster.local/ns/shop/sa/default"]}}]
       to: [{operation: {methods: [GET], paths: ["/api/*"]}}]
 ---
-# L7 policy on a service that opted OUT of the waypoint -> plugin flags it.
+# L7 policy on a service that opted OUT of the waypoint. ztunnel has to enforce
+# it, cannot evaluate the L7 conditions, and so fails closed and denies.
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
-metadata: {name: orders-l7-unenforced, namespace: shop}
+metadata: {name: orders-l7-denied, namespace: shop}
 spec:
   targetRefs:
     - kind: Service

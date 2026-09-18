@@ -7,12 +7,12 @@ existing Istio UIs in Headlamp do not do:
 Istio custom resources are almost entirely `spec`. A detail view that renders only metadata
 and conditions tells you nothing about a `DestinationRule` or `ServiceEntry`, so you end up
 clicking *Edit* just to read the configuration. Here, typed sections render the parts we
-model, and a generic recursive renderer covers everything else — including fields added by
+model, and a generic recursive renderer covers everything else, including fields added by
 Istio releases newer than this plugin.
 
 **2. Ambient mode is first-class.**
 Waypoints, ztunnel, `istio-cni`, namespace enrolment and the L4/L7 split are surfaced
-directly — including the case where an L7 `AuthorizationPolicy` is silently not enforced
+directly, including the case where an L7 `AuthorizationPolicy` is silently not enforced
 because no waypoint sits in the request path.
 
 ## Features
@@ -36,17 +36,17 @@ Every page ends with a **Full spec** section, so nothing in the resource is ever
 
 ### Ambient mode
 
-- **Mesh Overview** — control-plane version, ztunnel and `istio-cni` DaemonSet health,
+- **Mesh Overview**: control-plane version, ztunnel and `istio-cni` DaemonSet health,
   ambient vs sidecar namespace counts, installed Istio APIs.
-- **Waypoints** — every `istio-waypoint` Gateway, what it is enrolled for (resolved by
+- **Waypoints**: every `istio-waypoint` Gateway, what it is enrolled for (resolved by
   scanning `istio.io/use-waypoint` labels across namespaces and Services), attached L7
   policies, and a warning for waypoints nothing routes through.
-- **L7 enforcement check** — an `AuthorizationPolicy` using HTTP methods, paths, hosts or
+- **L7 enforcement check**: an `AuthorizationPolicy` using HTTP methods, paths, hosts or
   JWT claims is checked against the waypoint coverage of its targets. If no waypoint is in
   the path, the page says the rules are *not enforced* and names the exact fields being
   ignored. Nothing in Kubernetes or Istio errors in this situation, which is what makes it
   easy to ship by accident.
-- **Mesh column** — Headlamp's own Pod and workload lists gain an `Ambient` / `Sidecar` /
+- **Mesh column**: Headlamp's own Pod and workload lists gain an `Ambient` / `Sidecar` /
   `Out of mesh` column.
 
 ### Istio context on built-in pages
@@ -81,7 +81,7 @@ npm run package    # tarball for distribution
 
 The plugin needs a cluster where Istio CRDs are readable; many production SSO roles cannot
 list them. `dev/kind-istio-ambient.sh` builds one: kind + Gateway API + Istio ambient, plus
-`dev/sample-istio-config.yaml`, which exercises every view — including two deliberately
+`dev/sample-istio-config.yaml`, which exercises every view, including two deliberately
 broken resources (a `STATIC` ServiceEntry with no endpoints, an L7 `AuthorizationPolicy`
 targeting a Service that opted out of its waypoint) so the warnings have something to catch.
 
@@ -91,11 +91,12 @@ targeting a Service that opted out of its waypoint) so the warnings have somethi
 
 ### Tests
 
-The analysis that decides what the UI *claims* about a resource — which enforcement layer a
-policy needs, whether a ServiceEntry silently routes nothing, how a host string resolves —
-lives in `src/lib/analyze.ts` and `src/lib/mesh.ts` as pure functions, with no Headlamp or
-React imports. Tests run those against fixtures captured from a real Istio 1.30.1 ambient
-cluster, so they check behaviour against the shapes the API server actually returns:
+The analysis that decides what the UI *claims* about a resource lives in
+`src/lib/analyze.ts` and `src/lib/mesh.ts` as pure functions, with no Headlamp or React
+imports: which enforcement layer a policy needs, whether a ServiceEntry silently routes
+nothing, how a host string resolves. Tests run those against fixtures captured from a real
+Istio 1.30.1 ambient cluster, so they check behaviour against the shapes the API server
+actually returns:
 
 ```sh
 npm test
@@ -118,8 +119,3 @@ src/
 
 Adding a resource means adding one entry to `src/registry/resources.tsx`; routes, sidebar
 entries, list columns and the detail page are all derived from it.
-
-## Licence
-
-Apache-2.0. Istio is a trademark of the Istio Authors; this project is not affiliated with
-or endorsed by the Istio project.

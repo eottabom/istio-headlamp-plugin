@@ -99,11 +99,22 @@ jobs:
 
           python3 - "$VERSION" "$url" "$CHECKSUM" <<'PY'
           import re, sys
+          from datetime import datetime, timezone
 
           version, url, checksum = sys.argv[1:4]
           path = f'{version}/artifacthub-pkg.yml'
           s = open(path).read()
           s = re.sub(r'^version: .*$', f'version: {version}', s, count=1, flags=re.M)
+          # createdAt is per version. Copied forward unchanged it pins every
+          # release to the date the first manifest was written, which is what
+          # the catalogue prints as "updated".
+          s = re.sub(
+              r'^createdAt: .*$',
+              f'createdAt: "{datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}"',
+              s,
+              count=1,
+              flags=re.M,
+          )
           s = re.sub(r'(headlamp/plugin/archive-url: ).*$', rf'\1"{url}"', s, count=1, flags=re.M)
           s = re.sub(
               r'(headlamp/plugin/archive-checksum: ).*$',

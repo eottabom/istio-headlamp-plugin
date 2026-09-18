@@ -12,8 +12,8 @@ Istio releases newer than this plugin.
 
 **2. Ambient mode is first-class.**
 Waypoints, ztunnel, `istio-cni`, namespace enrolment and the L4/L7 split are surfaced
-directly, including the case where an L7 `AuthorizationPolicy` is silently not enforced
-because no waypoint sits in the request path.
+directly, including the case where an L7 `AuthorizationPolicy` reaches ztunnel instead of a
+waypoint and fails closed, denying the traffic it was meant to filter.
 
 ## Features
 
@@ -42,10 +42,17 @@ Every page ends with a **Full spec** section, so nothing in the resource is ever
   scanning `istio.io/use-waypoint` labels across namespaces and Services), attached L7
   policies, and a warning for waypoints nothing routes through.
 - **L7 enforcement check**: an `AuthorizationPolicy` using HTTP methods, paths, hosts or
-  JWT claims is checked against the waypoint coverage of its targets. If no waypoint is in
-  the path, the page says the rules are *not enforced* and names the exact fields being
-  ignored. Nothing in Kubernetes or Istio errors in this situation, which is what makes it
-  easy to ship by accident.
+  JWT claims is checked against what actually enforces it. Two Istio rules decide this, and
+  both are easy to get wrong by hand:
+  - only a `targetRef` attaches a policy to a waypoint. A `selector`, or neither, leaves the
+    policy with ztunnel however the namespace is labelled.
+  - ztunnel cannot evaluate L7, and does not skip what it cannot evaluate: the policy
+    **fails closed and denies**.
+
+  So the page names the enforcement point rather than guessing. A `use-waypoint` label is
+  checked against the Gateways that exist, because a typo in that label otherwise reads as
+  full coverage. When the mesh state, Services or Namespaces cannot be read, the page says
+  it cannot determine enforcement instead of assuming.
 - **Mesh column**: Headlamp's own Pod and workload lists gain an `Ambient` / `Sidecar` /
   `Out of mesh` column.
 

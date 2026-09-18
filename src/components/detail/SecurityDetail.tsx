@@ -72,8 +72,10 @@ function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
       );
     case 'dangling':
       return <Chip size="small" color="error" label="L7 — target not found" variant="outlined" />;
-    case 'uncovered':
-      return <Chip size="small" color="error" label="L7 — NOT enforced" variant="outlined" />;
+    case 'ztunnel-denies':
+      return <Chip size="small" color="error" label="L7 — ztunnel will deny" variant="outlined" />;
+    case 'unknown':
+      return <Chip size="small" label="L7 — cannot determine" variant="outlined" />;
   }
 }
 
@@ -117,11 +119,26 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
     );
   }
 
+  if (coverage.state === 'unknown') {
+    return (
+      <ConfigWarning severity="info" title="Enforcement cannot be determined">
+        <Typography variant="body2">
+          This policy uses L7 attributes, but {coverage.reason}. Nothing here says whether they are
+          enforced; the page is not claiming they are.
+        </Typography>
+      </ConfigWarning>
+    );
+  }
+
+  // ztunnel does not skip L7 conditions it cannot evaluate, it fails closed.
+  // Saying "silently ignored" here pointed the reader at the opposite risk:
+  // the traffic is being dropped, not let through unchecked.
   return (
-    <ConfigWarning severity="error" title="L7 rules will not be enforced">
+    <ConfigWarning severity="error" title="ztunnel will deny traffic matched by this policy">
       <Typography variant="body2" sx={{ mb: 1 }}>
-        This cluster runs Istio in ambient mode, where ztunnel enforces L4 only. No waypoint was
-        found for the targets of this policy, so the following L7 conditions are silently ignored:
+        In ambient mode ztunnel enforces L4 only, and a policy it cannot fully evaluate fails
+        closed. Here {coverage.reason}, so ztunnel is the enforcement point and these conditions
+        turn the policy into a deny:
       </Typography>
       <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
         {coverage.requirements.map(r => (
@@ -131,8 +148,10 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
         ))}
       </Box>
       <Typography variant="body2" sx={{ mt: 1 }}>
-        Deploy a waypoint and label the target with <Mono>istio.io/use-waypoint</Mono>, or restrict
-        the policy to L4 attributes (ports, principals, namespaces, IP blocks).
+        Attach the policy to a waypoint with <Mono>targetRefs</Mono>, pointing at the waypoint
+        Gateway or at a Service enrolled with one. A <Mono>selector</Mono> cannot do this: only a
+        targetRef puts a policy on a waypoint. Otherwise restrict the policy to L4 attributes
+        (ports, principals, namespaces, IP blocks).
       </Typography>
     </ConfigWarning>
   );

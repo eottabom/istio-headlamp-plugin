@@ -63,7 +63,11 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          npm version "$VERSION" --no-git-tag-version >/dev/null
+          # npm version refuses to "bump" to the version already in the file,
+          # which is exactly the case on a first release.
+          if [ "$(node -p "require('./package.json').version")" != "$VERSION" ]; then
+            npm version "$VERSION" --no-git-tag-version >/dev/null
+          fi
           npm run build
           npm run package >/dev/null
           tarball="istio-headlamp-plugin-${VERSION}.tar.gz"
@@ -103,7 +107,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json artifacthub-pkg.yml
-          git commit -m "release: v${VERSION}"
+          # Nothing to commit when re-releasing an identical tree; the tag and
+          # the release still need to happen.
+          git diff --cached --quiet || git commit -m "release: v${VERSION}"
           git tag -a "v${VERSION}" -m "v${VERSION}"
           git push origin HEAD:"${{ github.event.repository.default_branch }}" --follow-tags
 

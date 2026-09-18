@@ -7,3 +7,4 @@ coverage/
 .eslintcache
 storybook-static/
 .gstack/
+plugins/

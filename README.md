@@ -22,39 +22,114 @@ waypoint and fails closed, denying the traffic it was meant to filter.
 
 ## Install
 
-### From Headlamp
+### Download the GitHub release package
 
-Open **Plugins** in the Headlamp sidebar, find **Istio**, and install it. The package is on
-[Artifact Hub](https://artifacthub.io/packages/search?repo=istio-headlamp-plugin).
+Download [`istio-headlamp-plugin-0.1.4.tar.gz`](https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.4/istio-headlamp-plugin-0.1.4.tar.gz)
+from [GitHub Releases](https://github.com/eottabom/istio-headlamp-plugin/releases).
+Use the plugin `.tar.gz` asset under **Assets**, not GitHub's **Source code** archives.
+The package contains the built plugin; Node.js and npm are not needed to install it.
 
-### From a release tarball
+### Headlamp desktop (Linux / macOS)
+
+Download and extract the package into the desktop app's plugin directory:
 
 ```sh
-VERSION=0.1.3
-mkdir -p ~/.config/Headlamp/plugins
-curl -fsSL "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz" \
-  | tar xz -C ~/.config/Headlamp/plugins
+VERSION=0.1.4
+ARCHIVE="istio-headlamp-plugin-${VERSION}.tar.gz"
+curl -fL --output "$ARCHIVE" \
+  "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/${ARCHIVE}"
+mkdir -p "$HOME/.config/Headlamp/plugins"
+tar -xzf "$ARCHIVE" -C "$HOME/.config/Headlamp/plugins"
 ```
 
-Every version is on the
-[releases page](https://github.com/eottabom/istio-headlamp-plugin/releases).
+On Windows, extract the same package into `%APPDATA%\Headlamp\Config\plugins`.
+Restart Headlamp after installing. The extracted layout must be:
 
-For Headlamp in a container, unpack into the directory it serves plugins from and start it
-with `-plugins-dir=/headlamp/plugins`.
+```text
+plugins/
+└── istio-headlamp-plugin/
+    ├── main.js
+    └── package.json
+```
 
-### From source
+Keep any other files included in the package alongside these files.
+
+### Headlamp in a cluster or container (GitHub Packages)
+
+The [GitHub Package](https://github.com/eottabom/istio-headlamp-plugin/pkgs/container/istio-headlamp-plugin)
+`ghcr.io/eottabom/istio-headlamp-plugin:0.1.4` contains the same built plugin at
+`/plugins/istio-headlamp-plugin`. It is a plugin delivery image, not a Headlamp server.
+
+Add these fields to your Headlamp Deployment's Pod spec, retaining its existing image,
+arguments, credentials and other settings:
+
+```yaml
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: install-istio-plugin
+          image: ghcr.io/eottabom/istio-headlamp-plugin:0.1.4
+          command: ["/bin/sh", "-c"]
+          args: ["cp -R /plugins/. /headlamp/plugins/"]
+          volumeMounts:
+            - name: headlamp-plugins
+              mountPath: /headlamp/plugins
+      containers:
+        - name: headlamp # match your existing Headlamp container name
+          # Keep your existing image and args; add -plugins-dir=/headlamp/plugins.
+          volumeMounts:
+            - name: headlamp-plugins
+              mountPath: /headlamp/plugins
+      volumes:
+        - name: headlamp-plugins
+          emptyDir: {}
+```
+
+This is a Deployment fragment, not a standalone manifest. If you already mount a plugin
+volume, reuse it instead of replacing it. The init container copies the plugin before
+Headlamp starts; configure Headlamp with `-plugins-dir=/headlamp/plugins` to load it.
+
+For a local container, populate a directory with the package and mount it into Headlamp:
+
+```sh
+mkdir -p ./headlamp-plugins
+docker run --rm \
+  -v "$PWD/headlamp-plugins:/headlamp/plugins" \
+  ghcr.io/eottabom/istio-headlamp-plugin:0.1.4
+```
+
+Mount that directory at `/headlamp/plugins` in your Headlamp container. Alternatively,
+extract the release tarball into the same directory. See Headlamp's
+[deployment guide](https://headlamp.dev/docs/latest/development/plugins/building/)
+for plugin volumes and init containers.
+
+### Plugin Catalog (desktop only)
+
+If your desktop app includes **Plugin Catalog**, you can also search there for **Istio**.
+This is a community plugin, so you may need to allow non-official plugins in the catalog.
+Check that the source is `eottabom/istio-headlamp-plugin` before installing.
+The **Plugins** settings page and the in-cluster UI are not the desktop Plugin Catalog.
+[Artifact Hub](https://artifacthub.io/packages/headlamp/istio-headlamp-plugin/istio-headlamp-plugin)
+indexes the package; its archive is hosted on GitHub Releases.
+
+### Build a package from source
+
+For development, use Node.js 22 and build the same installable archive:
 
 ```sh
 git clone https://github.com/eottabom/istio-headlamp-plugin.git
 cd istio-headlamp-plugin
-npm install
+npm ci
 npm run build
-npm run package     # produces istio-headlamp-plugin-<version>.tar.gz
+npm run package
 ```
 
-`npm run build` writes `dist/`, which is the plugin itself: copy `dist/` and `package.json`
-into a directory named after the plugin under Headlamp's plugins directory. `dev/deploy.sh`
-does this for the desktop app and any mounted path at once.
+Install the resulting `istio-headlamp-plugin-<version>.tar.gz` using the extraction
+steps above. When copying a build manually, copy the **contents** of `dist/` and
+`package.json` into `plugins/istio-headlamp-plugin/`; `main.js` must be directly inside
+that directory, not inside a nested `dist/` directory. `dev/deploy.sh` copies this
+layout to the Linux/macOS desktop directory and any additional paths you pass to it.
 
 ### What it needs to read
 
@@ -134,7 +209,10 @@ Istio sections are injected into Headlamp's own resource views:
 - **Namespace** → dataplane mode, default waypoint, and the *effective* mTLS mode resolved
   from namespace and mesh-wide `PeerAuthentication`.
 
-![Istio section on a Service page](docs/images/service-context.png)
+The **Istio** section on the `reviews` Service links its routing resources,
+authorization policies and waypoint:
+
+![Istio section on the reviews Service: routing resources, policies and waypoint](docs/images/service-context.png)
 
 ## Compatibility
 
@@ -196,3 +274,15 @@ src/
 
 Adding a resource means adding one entry to `src/registry/resources.tsx`; routes, sidebar
 entries, list columns and the detail page are all derived from it.
+
+## Releasing
+
+Run the **Release** workflow with the version without `v`. It verifies the plugin,
+publishes the release tarball, updates Artifact Hub metadata, and then calls
+**Publish GitHub Package** to publish the same artifact to GHCR for `linux/amd64`
+and `linux/arm64`. Container tags use the exact version (for example, `0.1.4`).
+
+If image publication fails after the release succeeds, rerun **Publish GitHub Package**
+with that existing release version; do not recreate the release. On first publication,
+set the package's visibility to **Public** in GitHub's package settings so clusters can
+pull it without registry credentials. The image's source label links it to this repository.

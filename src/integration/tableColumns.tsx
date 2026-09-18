@@ -50,7 +50,7 @@ const meshColumn = (render: (item: any) => JSX.Element) => ({
 });
 
 export const meshColumnsProcessor = {
-  id: 'headlamp-istio-mesh-column',
+  id: 'istio-headlamp-plugin-mesh-column',
   processor: ({ id, columns }: { id: string; columns: any[] }) => {
     if (columns.some((c: any) => c?.id === 'istio-mesh')) return columns;
 

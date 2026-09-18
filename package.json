@@ -1,5 +1,5 @@
 {
-  "name": "headlamp-istio",
+  "name": "istio-headlamp-plugin",
   "version": "0.1.0",
   "description": "Istio service mesh UI for Headlamp, with first-class ambient mode support and spec-first resource details.",
   "scripts": {
@@ -44,7 +44,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/eottabom/headlamp-istio.git"
+    "url": "git+https://github.com/eottabom/istio-headlamp-plugin.git"
   },
-  "homepage": "https://github.com/eottabom/headlamp-istio"
+  "homepage": "https://github.com/eottabom/istio-headlamp-plugin"
 }

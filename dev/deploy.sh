@@ -20,9 +20,9 @@ install_to() {
   echo "-> $dest"
 }
 
-install_to "$HOME/.config/Headlamp/plugins/headlamp-istio"
+install_to "$HOME/.config/Headlamp/plugins/istio-headlamp-plugin"
 for extra in "$@"; do
-  install_to "$extra/headlamp-istio"
+  install_to "$extra/istio-headlamp-plugin"
 done
 
 echo

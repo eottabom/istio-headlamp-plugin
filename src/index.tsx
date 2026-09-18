@@ -1,5 +1,5 @@
 /**
- * headlamp-istio
+ * istio-headlamp-plugin
  *
  * An Istio service mesh UI for Headlamp, built around two ideas:
  *

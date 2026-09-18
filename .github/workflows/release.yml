@@ -119,6 +119,13 @@ jobs:
           sed -i -E "s/^([[:space:]]*)VERSION=[0-9]+\.[0-9]+\.[0-9]+$/\1VERSION=${VERSION}/" \
             artifacthub-pkg.yml README.md
 
+          # Keep the clickable release asset link in both install guides current.
+          sed -i -E "s@releases/download/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?/istio-headlamp-plugin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tar\.gz@releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz@g; s@\[istio-headlamp-plugin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tar\.gz\]@[istio-headlamp-plugin-${VERSION}.tar.gz]@g" \
+            artifacthub-pkg.yml README.md
+
+          sed -i -E "s@(ghcr.io/${GITHUB_REPOSITORY}:)[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?@\1${VERSION}@g" \
+            artifacthub-pkg.yml README.md
+
       - name: Commit, tag and push
         env:
           VERSION: ${{ inputs.version }}
@@ -141,3 +148,12 @@ jobs:
         run: |
           gh release create "v${VERSION}" "${{ steps.package.outputs.tarball }}" \
             --title "v${VERSION}" --generate-notes
+
+  publish-package:
+    needs: release
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/publish-package.yml
+    with:
+      version: ${{ inputs.version }}

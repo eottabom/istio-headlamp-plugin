@@ -18,7 +18,7 @@ Waypoints, ztunnel, `istio-cni`, namespace enrolment and the L4/L7 split are sur
 directly, including the case where an L7 `AuthorizationPolicy` reaches ztunnel instead of a
 waypoint and fails closed, denying the traffic it was meant to filter.
 
-![Mesh Overview](docs/images/mesh-overview.png)
+![Demo](docs/images/demo.gif)
 
 ## Install
 

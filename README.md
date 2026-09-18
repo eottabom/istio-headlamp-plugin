@@ -133,9 +133,13 @@ layout to the Linux/macOS desktop directory and any additional paths you pass to
 
 ### What it needs to read
 
-The Istio CRDs (`networking.istio.io`, `security.istio.io`, `telemetry.istio.io`,
-`extensions.istio.io`), Gateway API `Gateway` objects, and Namespaces, Services, Pods,
-Deployments and DaemonSets. Views that cannot read something say so rather than guessing.
+The plugin needs read access to:
+
+- **Istio APIs:** networking.istio.io, security.istio.io, telemetry.istio.io, extensions.istio.io
+- **Gateway API:** Gateway objects
+- **Kubernetes resources:** Namespaces, Services, Pods, Deployments and DaemonSets
+
+Views that cannot read something say so rather than guessing.
 
 ## Features
 

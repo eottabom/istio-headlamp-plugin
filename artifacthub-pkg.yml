@@ -150,9 +150,13 @@ install: |
 
   ### What it needs to read
 
-  The Istio CRDs (`networking.istio.io`, `security.istio.io`, `telemetry.istio.io`,
-  `extensions.istio.io`), Gateway API `Gateway` objects, and Namespaces, Services, Pods,
-  Deployments and DaemonSets. Views that cannot read something say so rather than guessing.
+  The plugin needs read access to:
+
+  - **Istio APIs:** networking.istio.io, security.istio.io, telemetry.istio.io, extensions.istio.io
+  - **Gateway API:** Gateway objects
+  - **Kubernetes resources:** Namespaces, Services, Pods, Deployments and DaemonSets
+
+  Views that cannot read something say so rather than guessing.
 annotations:
   headlamp/plugin/archive-url: "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.4/istio-headlamp-plugin-0.1.4.tar.gz"
   headlamp/plugin/archive-checksum: "SHA256:1fb54c841f501dca5b783e7c97a5cb7881dc3190c4f10d666c5cce68be4a85b6"

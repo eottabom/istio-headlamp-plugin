@@ -14,8 +14,8 @@ export type L7Coverage =
   | { state: 'sidecar'; requirements: string[] }
   /** A waypoint or an ingress/egress gateway terminates L7 for these targets. */
   | { state: 'covered'; requirements: string[]; via: string[]; through: 'waypoint' | 'gateway' }
-  /** targetRefs name a Gateway that does not exist, so nothing is enforced. */
-  | { state: 'dangling'; requirements: string[]; missing: string[] }
+  /** targetRefs name an object that does not exist, so nothing is enforced. */
+  | { state: 'dangling'; requirements: string[]; missing: string[]; targetKind: string }
   | { state: 'uncovered'; requirements: string[] };
 
 export interface L7Subject {
@@ -51,7 +51,9 @@ export function useL7Coverage(policy: L7Subject): L7Coverage {
       )
     );
     if (matched.length > 0) {
-      const allWaypoints = matched.every(g => waypoints.some(w => w.metadata.uid === g.metadata.uid));
+      const allWaypoints = matched.every(g =>
+        waypoints.some(w => w.metadata.uid === g.metadata.uid)
+      );
       return {
         state: 'covered',
         requirements,
@@ -63,13 +65,34 @@ export function useL7Coverage(policy: L7Subject): L7Coverage {
       state: 'dangling',
       requirements,
       missing: gatewayTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
+      targetKind: 'Gateway',
     };
   }
 
   const ns = (namespaces ?? []).find(n => n.metadata.name === policyNs) ?? null;
+
+  // Namespace matters as much as name here: the Service list is scoped to the
+  // policy's own namespace, so matching on name alone let a targetRef pointing
+  // at `other-ns/reviews` bind to the local `reviews` and report its waypoint.
+  const serviceTargets = targets.filter(t => (t.kind ?? 'Service') === 'Service');
   const targetedServices = (services ?? []).filter(svc =>
-    targets.some(t => (t.kind ?? 'Service') === 'Service' && t.name === svc.metadata.name)
+    serviceTargets.some(
+      t => t.name === svc.metadata.name && (t.namespace ?? policyNs) === svc.metadata.namespace
+    )
   );
+
+  // Service targetRefs that resolve to nothing bind to nothing. Falling through
+  // to the namespace-wide branch below reported the namespace default waypoint
+  // as covering a policy that waypoint never sees. `services === null` is the
+  // list still loading, which is not the same as the target being absent.
+  if (serviceTargets.length > 0 && targetedServices.length === 0 && services !== null) {
+    return {
+      state: 'dangling',
+      requirements,
+      missing: serviceTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
+      targetKind: 'Service',
+    };
+  }
 
   // With no Service targetRefs the policy is namespace-wide, so the namespace
   // default waypoint is what decides.

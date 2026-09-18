@@ -1,4 +1,4 @@
-# headlamp-istio
+# istio-headlamp-plugin
 
 An Istio service mesh plugin for [Headlamp](https://headlamp.dev), built around two things
 existing Istio UIs in Headlamp do not do:

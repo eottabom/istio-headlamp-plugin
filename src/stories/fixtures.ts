@@ -23,7 +23,9 @@ export const ruleWithConditions: AuthorizationRule = {
       },
     },
   ],
-  to: [{ operation: { methods: ['DELETE'], paths: ['/api/reviews/*/admin'], notPorts: ['15021'] } }],
+  to: [
+    { operation: { methods: ['DELETE'], paths: ['/api/reviews/*/admin'], notPorts: ['15021'] } },
+  ],
   when: [
     { key: 'request.auth.claims[groups]', values: ['platform-admins'] },
     { key: 'request.headers[x-internal]', values: ['true'] },

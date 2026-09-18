@@ -56,8 +56,14 @@ export const TargetRefs: StoryObj<typeof TargetRefChip> = {
   render: () => (
     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
       <TargetRefChip refObj={{ kind: 'Service', name: 'reviews' }} fallbackNamespace="shop" />
-      <TargetRefChip refObj={{ kind: 'Gateway', name: 'dev-gateway' }} fallbackNamespace="istio-system" />
-      <TargetRefChip refObj={{ kind: 'ServiceEntry', name: 'payments-api' }} fallbackNamespace="shop" />
+      <TargetRefChip
+        refObj={{ kind: 'Gateway', name: 'dev-gateway' }}
+        fallbackNamespace="istio-system"
+      />
+      <TargetRefChip
+        refObj={{ kind: 'ServiceEntry', name: 'payments-api' }}
+        fallbackNamespace="shop"
+      />
     </Stack>
   ),
 };

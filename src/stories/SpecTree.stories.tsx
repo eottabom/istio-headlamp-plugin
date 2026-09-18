@@ -44,7 +44,10 @@ export const TreeLongList: TreeStory = {
 export const TreeEnvironmentVariables: TreeStory = {
   args: {
     value: {
-      environmentVariables: { ISTIO_META_DNS_CAPTURE: 'true', ISTIO_META_DNS_AUTO_ALLOCATE: 'true' },
+      environmentVariables: {
+        ISTIO_META_DNS_CAPTURE: 'true',
+        ISTIO_META_DNS_AUTO_ALLOCATE: 'true',
+      },
       concurrency: 4,
     },
   },

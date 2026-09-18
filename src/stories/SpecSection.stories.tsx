@@ -1,6 +1,12 @@
 import { Box } from '@mui/material';
 import { Meta, StoryObj } from '@storybook/react';
-import { ChipList, ConfigWarning, LabelPairs, SpecSection, TextList } from '../components/common/SpecSection';
+import {
+  ChipList,
+  ConfigWarning,
+  LabelPairs,
+  SpecSection,
+  TextList,
+} from '../components/common/SpecSection';
 import { SpecTable } from '../components/detail/Table';
 import { serviceEntrySpec } from './fixtures';
 
@@ -54,7 +60,9 @@ export const ChipsVersusText: StoryObj = {
 
 /** Long lists cap, so one rule cannot push the rest of the page off screen. */
 export const CappedChipList: StoryObj = {
-  render: () => <ChipList items={Array.from({ length: 40 }, (_, i) => `/service-${i}/*`)} max={8} />,
+  render: () => (
+    <ChipList items={Array.from({ length: 40 }, (_, i) => `/service-${i}/*`)} max={8} />
+  ),
 };
 
 export const Warnings: StoryObj = {

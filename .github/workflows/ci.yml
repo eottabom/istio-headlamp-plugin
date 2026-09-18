@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Formatting is checked separately from lint: the eslint config does not
+      # run prettier, so a badly formatted tree passes `npm run lint` happily.
+      - name: Format
+        run: npx prettier --check "src/**/*.{ts,tsx}"
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run tsc
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

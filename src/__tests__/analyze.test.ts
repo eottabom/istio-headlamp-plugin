@@ -188,16 +188,18 @@ describe('describeExportTo', () => {
 
 describe('authorizationOperations', () => {
   it('summarises method and path so the list can be searched by path', () => {
-    expect(authorizationOperations(spec(authorizationPolicies, 'orders-l7-unenforced').rules)).toEqual([
-      'DELETE /admin/*',
-    ]);
-    expect(authorizationOperations(spec(authorizationPolicies, 'reviews-read-only').rules)).toEqual([
-      'GET /api/*',
-    ]);
+    expect(
+      authorizationOperations(spec(authorizationPolicies, 'orders-l7-unenforced').rules)
+    ).toEqual(['DELETE /admin/*']);
+    expect(authorizationOperations(spec(authorizationPolicies, 'reviews-read-only').rules)).toEqual(
+      ['GET /api/*']
+    );
   });
 
   it('renders a port-only (L4) operation', () => {
-    expect(authorizationOperations(spec(authorizationPolicies, 'shop-l4').rules)).toEqual([':8080']);
+    expect(authorizationOperations(spec(authorizationPolicies, 'shop-l4').rules)).toEqual([
+      ':8080',
+    ]);
   });
 
   it('marks negated fields with !', () => {

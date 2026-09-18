@@ -1,6 +1,10 @@
 import { Box } from '@mui/material';
 import { Meta, StoryObj } from '@storybook/react';
-import { RuleConditionCell, RuleOperationCell, RuleSourceCell } from '../components/detail/RuleCells';
+import {
+  RuleConditionCell,
+  RuleOperationCell,
+  RuleSourceCell,
+} from '../components/detail/RuleCells';
 import { hugeGatewayRule, l4Rule, ruleWithConditions, simpleRule } from './fixtures';
 
 /**

@@ -111,12 +111,9 @@ export function authorizationOperations(rules: AuthorizationRule[] | undefined):
       const hosts = join(op.hosts, op.notHosts);
       const ports = join(op.ports, op.notPorts);
 
-      const parts = [
-        methods,
-        paths,
-        hosts ? `host=${hosts}` : '',
-        ports ? `:${ports}` : '',
-      ].filter(Boolean);
+      const parts = [methods, paths, hosts ? `host=${hosts}` : '', ports ? `:${ports}` : ''].filter(
+        Boolean
+      );
       out.push(parts.length > 0 ? parts.join(' ') : 'any operation');
     });
   });
@@ -175,23 +172,34 @@ export function ruleSearchTerms(rule: AuthorizationRule): string[] {
 
   rule.from?.forEach(f => {
     const s = f.source ?? {};
-    push(s.principals); push(s.notPrincipals);
-    push(s.namespaces); push(s.notNamespaces);
-    push(s.requestPrincipals); push(s.notRequestPrincipals);
-    push(s.ipBlocks); push(s.notIpBlocks);
-    push(s.remoteIpBlocks); push(s.notRemoteIpBlocks);
-    push(s.serviceAccounts); push(s.notServiceAccounts);
+    push(s.principals);
+    push(s.notPrincipals);
+    push(s.namespaces);
+    push(s.notNamespaces);
+    push(s.requestPrincipals);
+    push(s.notRequestPrincipals);
+    push(s.ipBlocks);
+    push(s.notIpBlocks);
+    push(s.remoteIpBlocks);
+    push(s.notRemoteIpBlocks);
+    push(s.serviceAccounts);
+    push(s.notServiceAccounts);
   });
   rule.to?.forEach(t => {
     const op = t.operation ?? {};
-    push(op.methods); push(op.notMethods);
-    push(op.paths); push(op.notPaths);
-    push(op.hosts); push(op.notHosts);
-    push(op.ports); push(op.notPorts);
+    push(op.methods);
+    push(op.notMethods);
+    push(op.paths);
+    push(op.notPaths);
+    push(op.hosts);
+    push(op.notHosts);
+    push(op.ports);
+    push(op.notPorts);
   });
   rule.when?.forEach(c => {
     if (c.key) out.push(c.key);
-    push(c.values); push(c.notValues);
+    push(c.values);
+    push(c.notValues);
   });
 
   return out;

@@ -34,7 +34,15 @@ export function InlineSpec({ value, maxDepth = 4 }: InlineSpecProps) {
   }
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 1.5, rowGap: 0.25, minWidth: 0 }}>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'max-content 1fr',
+        columnGap: 1.5,
+        rowGap: 0.25,
+        minWidth: 0,
+      }}
+    >
       {leaves.map(leaf => (
         <Box key={leaf.path} sx={{ display: 'contents' }}>
           <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
@@ -67,7 +75,9 @@ function flatten(value: unknown, prefix: string, depth: number): Leaf[] {
     if (depth <= 0) return [{ path: prefix || '…', value: JSON.stringify(value) }];
     return Object.entries(value as Record<string, unknown>)
       .filter(([, v]) => v !== undefined)
-      .flatMap(([k, v]) => flatten(v, prefix ? `${prefix}.${humanizeKeyPath(k)}` : humanizeKeyPath(k), depth - 1));
+      .flatMap(([k, v]) =>
+        flatten(v, prefix ? `${prefix}.${humanizeKeyPath(k)}` : humanizeKeyPath(k), depth - 1)
+      );
   }
 
   return [{ path: prefix || 'value', value: String(value) }];

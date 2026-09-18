@@ -39,48 +39,49 @@ export function GenericDetail<T extends IstioObject>({
     // last section (usually Events) sat clipped against the bottom edge.
     <Box sx={{ pb: 6 }}>
       <DetailsGrid
-      resourceType={resourceClass}
-      name={name}
-      namespace={namespace}
-      withEvents
-      extraInfo={(item: T | null) =>
-        item && headerInfo ? headerInfo(item).map(toNameValueRow) : []
-      }
-      extraSections={(item: T) => {
-        if (!item) return [];
-        const nodes: ReactNode[] = [];
+        resourceType={resourceClass}
+        name={name}
+        namespace={namespace}
+        withEvents
+        extraInfo={(item: T | null) =>
+          item && headerInfo ? headerInfo(item).map(toNameValueRow) : []
+        }
+        extraSections={(item: T) => {
+          if (!item) return [];
+          const nodes: ReactNode[] = [];
 
-        if (!hideAppliesTo) {
+          if (!hideAppliesTo) {
+            nodes.push(
+              <SectionBox key="applies-to" title="Applies to">
+                <AppliesTo resource={item} />
+              </SectionBox>
+            );
+          }
+
+          sections?.(item).forEach((node, i) => {
+            if (node) nodes.push(<div key={`typed-${i}`}>{node}</div>);
+          });
+
           nodes.push(
-            <SectionBox key="applies-to" title="Applies to">
-              <AppliesTo resource={item} />
+            <SectionBox key="full-spec" title="Full spec">
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Every field of <code>.spec</code>, including anything the sections above do not
+                cover.
+              </Typography>
+              <SpecTree value={item.jsonData.spec} />
             </SectionBox>
           );
-        }
 
-        sections?.(item).forEach((node, i) => {
-          if (node) nodes.push(<div key={`typed-${i}`}>{node}</div>);
-        });
+          const status = item.jsonData.status;
+          if (status && Object.keys(status).length > 0) {
+            nodes.push(
+              <SectionBox key="status" title="Status">
+                <SpecTree value={status} />
+              </SectionBox>
+            );
+          }
 
-        nodes.push(
-          <SectionBox key="full-spec" title="Full spec">
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Every field of <code>.spec</code>, including anything the sections above do not cover.
-            </Typography>
-            <SpecTree value={item.jsonData.spec} />
-          </SectionBox>
-        );
-
-        const status = item.jsonData.status;
-        if (status && Object.keys(status).length > 0) {
-          nodes.push(
-            <SectionBox key="status" title="Status">
-              <SpecTree value={status} />
-            </SectionBox>
-          );
-        }
-
-        return nodes;
+          return nodes;
         }}
       />
     </Box>

@@ -133,9 +133,7 @@ export function ChipList({
       </Typography>
     );
   }
-  return (
-    <CappedChips items={items} color={color} max={max} />
-  );
+  return <CappedChips items={items} color={color} max={max} />;
 }
 
 /** Inline warning used for the configuration checks this plugin performs. */
@@ -163,7 +161,13 @@ export function ConfigWarning({
  * mid-word ("reviews.shop.svc.cluster.loca"). Anything that can be long -- host
  * names, OCI URLs -- uses this instead.
  */
-export function TextList({ items, emptyText = '—' }: { items?: (string | number)[]; emptyText?: string }) {
+export function TextList({
+  items,
+  emptyText = '—',
+}: {
+  items?: (string | number)[];
+  emptyText?: string;
+}) {
   if (!items || items.length === 0) {
     return (
       <Typography component="span" variant="body2" color="text.disabled">

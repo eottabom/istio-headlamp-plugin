@@ -141,7 +141,9 @@ export function istioInfraRole(pod: KubeObject | undefined | null): string | und
   const labels = labelsOf(pod) ?? {};
 
   if (labels[GATEWAY_MANAGED]) {
-    return labels[GATEWAY_CLASS_NAME] === WAYPOINT_GATEWAY_CLASS ? 'waypoint proxy' : 'Istio gateway proxy';
+    return labels[GATEWAY_CLASS_NAME] === WAYPOINT_GATEWAY_CLASS
+      ? 'waypoint proxy'
+      : 'Istio gateway proxy';
   }
   if (labels[PART_OF] === 'istio') {
     const name = labels[APP_NAME] ?? labels['app'];

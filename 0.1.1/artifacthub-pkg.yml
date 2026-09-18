@@ -6,7 +6,7 @@
 version: 0.1.1
 name: istio-headlamp-plugin
 displayName: Istio
-createdAt: "2026-09-17T00:00:00Z"
+createdAt: "2026-09-18T13:07:02Z"
 description: >-
   Istio service mesh UI with first-class ambient mode support. Shows every
   resource's spec without opening the editor, surfaces waypoints and namespace

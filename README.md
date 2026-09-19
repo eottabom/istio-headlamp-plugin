@@ -24,8 +24,8 @@ waypoint and fails closed, denying the traffic it was meant to filter.
 
 ### Download the GitHub release package
 
-Download [`istio-headlamp-plugin-0.1.4.tar.gz`](https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.5/istio-headlamp-plugin-0.1.5.tar.gz)
-from [GitHub Releases](https://github.com/eottabom/istio-headlamp-plugin/releases).
+Download `istio-headlamp-plugin-<version>.tar.gz` from the
+[latest GitHub release](https://github.com/eottabom/istio-headlamp-plugin/releases/latest).
 Use the plugin `.tar.gz` asset under **Assets**, not GitHub's **Source code** archives.
 The package contains the built plugin; Node.js and npm are not needed to install it.
 
@@ -34,7 +34,8 @@ The package contains the built plugin; Node.js and npm are not needed to install
 Download and extract the package into the desktop app's plugin directory:
 
 ```sh
-VERSION=0.1.5
+VERSION="$(curl -fsSL https://api.github.com/repos/eottabom/istio-headlamp-plugin/releases/latest \
+  | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')"
 ARCHIVE="istio-headlamp-plugin-${VERSION}.tar.gz"
 curl -fL --output "$ARCHIVE" \
   "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/${ARCHIVE}"
@@ -57,8 +58,10 @@ Keep any other files included in the package alongside these files.
 ### Headlamp in a cluster or container (GitHub Packages)
 
 The [GitHub Package](https://github.com/eottabom/istio-headlamp-plugin/pkgs/container/istio-headlamp-plugin)
-`ghcr.io/eottabom/istio-headlamp-plugin:0.1.5` contains the same built plugin at
-`/plugins/istio-headlamp-plugin`. It is a plugin delivery image, not a Headlamp server.
+`ghcr.io/eottabom/istio-headlamp-plugin` contains the same built plugin at
+`/plugins/istio-headlamp-plugin`. Tags are release versions (see
+[Releases](https://github.com/eottabom/istio-headlamp-plugin/releases)) plus `latest`; pin a version in anything
+long-lived so a new release does not change your cluster unannounced. It is a plugin delivery image, not a Headlamp server.
 
 Add these fields to your Headlamp Deployment's Pod spec, retaining its existing image,
 arguments, credentials and other settings:
@@ -69,7 +72,7 @@ spec:
     spec:
       initContainers:
         - name: install-istio-plugin
-          image: ghcr.io/eottabom/istio-headlamp-plugin:0.1.5
+          image: ghcr.io/eottabom/istio-headlamp-plugin:latest # or a pinned version
           command: ["/bin/sh", "-c"]
           args: ["cp -R /plugins/. /headlamp/plugins/"]
           volumeMounts:
@@ -96,7 +99,7 @@ For a local container, populate a directory with the package and mount it into H
 mkdir -p ./headlamp-plugins
 docker run --rm \
   -v "$PWD/headlamp-plugins:/headlamp/plugins" \
-  ghcr.io/eottabom/istio-headlamp-plugin:0.1.5
+  ghcr.io/eottabom/istio-headlamp-plugin:latest # or a pinned version
 ```
 
 Mount that directory at `/headlamp/plugins` in your Headlamp container. Alternatively,
@@ -296,7 +299,8 @@ entries, list columns and the detail page are all derived from it.
 Run the **Release** workflow with the version without `v`. It verifies the plugin,
 publishes the release tarball, updates Artifact Hub metadata, and then calls
 **Publish GitHub Package** to publish the same artifact to GHCR for `linux/amd64`
-and `linux/arm64`. Container tags use the exact version (for example, `0.1.4`).
+and `linux/arm64`. Container tags use the exact version (for example, `1.2.3`), and
+the newest stable release is also tagged `latest`.
 
 The changelog is built from commit subjects since the previous tag: `feat:` becomes
 *added*, `fix:` *fixed* and `security:` *security*, in both the GitHub release notes and the

@@ -5,7 +5,7 @@ import { Alert, Box, Chip, Typography } from '@mui/material';
 import { useMemo } from 'react';
 import { EnumChip, MeshBadge } from '../components/common/Badges';
 import { Mono, SpecTable } from '../components/detail/Table';
-import { useMeshStatus } from '../lib/detect';
+import { useMeshStatus, useRootNamespace } from '../lib/detect';
 import { hostMatchesService } from '../lib/host';
 import { USE_WAYPOINT } from '../lib/labels';
 import { namespaceMeshState, podMeshState, resolveWaypoint } from '../lib/mesh';
@@ -227,7 +227,8 @@ export function NamespaceIstioSection({ resource }: { resource: KubeObject }) {
   const name = resource.metadata.name;
   const { ambientEnabled } = useMeshStatus();
   const [peerAuths] = PeerAuthentication.useList({ namespace: name });
-  const [rootPeerAuths] = PeerAuthentication.useList({ namespace: 'istio-system' });
+  const rootNamespace = useRootNamespace();
+  const [rootPeerAuths] = PeerAuthentication.useList({ namespace: rootNamespace });
 
   const state = namespaceMeshState(resource);
   const waypoint = resolveWaypoint(resource, resource);

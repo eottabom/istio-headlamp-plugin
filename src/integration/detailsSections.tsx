@@ -30,6 +30,27 @@ function istioRoute(resource: IstioObject) {
   };
 }
 
+/**
+ * A namespace we could not read may still carry the use-waypoint label, so an
+ * object without its own label has an unknown waypoint rather than none. Only
+ * the object's own label can be trusted while the namespace list is missing.
+ */
+function waypointUnknown(
+  resource: KubeObject,
+  namespaces: KubeObject[] | null,
+  ns: KubeObject | null
+) {
+  return !resource.metadata.labels?.[USE_WAYPOINT] && (namespaces === null || ns === null);
+}
+
+function UnknownWaypoint() {
+  return (
+    <Typography variant="body2" color="text.secondary">
+      unknown — namespace not readable
+    </Typography>
+  );
+}
+
 function ResourceLinks({ items }: { items: IstioObject[] }) {
   if (items.length === 0) {
     return (
@@ -63,6 +84,7 @@ export function ServiceIstioSection({ resource }: { resource: KubeObject }) {
 
   const ns = (namespaces ?? []).find(n => n.metadata.name === namespace) ?? null;
   const waypoint = resolveWaypoint(resource, ns as any);
+  const unknown = waypointUnknown(resource, namespaces, ns);
 
   const matched = useMemo(() => {
     const vs = (virtualServices ?? []).filter(v =>
@@ -104,7 +126,9 @@ export function ServiceIstioSection({ resource }: { resource: KubeObject }) {
           { label: 'AuthorizationPolicies', value: <ResourceLinks items={matched.ap} /> },
           {
             label: 'Waypoint',
-            value: waypoint.disabled ? (
+            value: unknown ? (
+              <UnknownWaypoint />
+            ) : waypoint.disabled ? (
               <Chip size="small" label="explicitly disabled" variant="outlined" />
             ) : waypoint.name ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -149,6 +173,7 @@ export function PodIstioSection({ resource }: { resource: KubeObject }) {
 
   const state = podMeshState(resource, ns as any);
   const waypoint = resolveWaypoint(resource, ns as any);
+  const unknown = waypointUnknown(resource, namespaces, ns);
 
   const proxy = ((resource.jsonData as any)?.spec?.containers ?? []).find(
     (c: any) => c.name === 'istio-proxy'
@@ -170,14 +195,15 @@ export function PodIstioSection({ resource }: { resource: KubeObject }) {
           ...(proxy ? [{ label: 'Proxy image', value: <Mono>{proxy.image}</Mono> }] : []),
           {
             label: 'Waypoint',
-            value:
-              waypoint.name && !waypoint.disabled ? (
-                <Mono>{waypoint.name}</Mono>
-              ) : (
-                <Typography variant="body2" color="text.disabled">
-                  none
-                </Typography>
-              ),
+            value: unknown ? (
+              <UnknownWaypoint />
+            ) : waypoint.name && !waypoint.disabled ? (
+              <Mono>{waypoint.name}</Mono>
+            ) : (
+              <Typography variant="body2" color="text.disabled">
+                none
+              </Typography>
+            ),
           },
         ]}
         columns={[

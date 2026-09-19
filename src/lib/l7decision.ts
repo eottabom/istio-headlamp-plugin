@@ -213,11 +213,23 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     };
   }
 
-  // The targeted Services exist but route through no waypoint, so ztunnel is
-  // the enforcement point and the L7 conditions make it deny.
+  // Some or all targeted Services route through no waypoint, so ztunnel is the
+  // enforcement point for them and the L7 conditions make it deny. When only
+  // some are unenrolled, naming them is the difference between a fix and a
+  // hunt: the others look fine and are.
+  const unenrolled = targetedServices
+    .filter((_, i) => !live.includes(bindings[i]))
+    .map(svc => `${svc.metadata.namespace ?? policyNs}/${svc.metadata.name}`);
   return {
     state: 'ztunnel-denies',
     requirements,
-    reason: 'the targeted Services are not enrolled with a waypoint',
+    reason:
+      unenrolled.length === targetedServices.length
+        ? 'the targeted Services are not enrolled with a waypoint'
+        : `${unenrolled.join(', ')} ${
+            unenrolled.length === 1 ? 'is' : 'are'
+          } not enrolled with a waypoint, so ztunnel denies traffic to ${
+            unenrolled.length === 1 ? 'it' : 'them'
+          }`,
   };
 }

@@ -180,6 +180,11 @@ describe('resolveL7Coverage', () => {
       }
     );
     expect(result.state).not.toBe('covered');
+    expect(result).toMatchObject({
+      state: 'ztunnel-denies',
+      reason: expect.stringContaining('shop/orders is not enrolled'),
+    });
+    expect(result).not.toMatchObject({ reason: expect.stringContaining('shop/reviews') });
   });
 
   it('does not credit a waypoint the Service explicitly opted out of', () => {

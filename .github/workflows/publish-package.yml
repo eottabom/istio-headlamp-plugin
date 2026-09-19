@@ -50,12 +50,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # `latest` follows the newest stable release only. Re-publishing an older
+      # version (the documented recovery for a failed image push) must not move
+      # it backwards, and a pre-release is never `latest`.
+      - name: Is this the latest release
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          newest="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
+          [ "$newest" = "v${VERSION}" ] && echo "enable=true" >>"$GITHUB_OUTPUT" || echo "enable=false" >>"$GITHUB_OUTPUT"
+
       - name: Image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          tags: type=raw,value=${{ inputs.version }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.enable }}
 
       - name: Publish plugin image
         uses: docker/build-push-action@v6

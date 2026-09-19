@@ -1,3 +1,4 @@
+import { WAYPOINT_FOR } from './labels';
 import { resolveWaypoint } from './mesh';
 
 /**
@@ -49,7 +50,9 @@ export interface L7Subject {
 export interface L7Inputs {
   ambientEnabled: boolean;
   loading: boolean;
-  waypoints: Array<{ metadata: { name: string; namespace?: string; uid?: string } }>;
+  waypoints: Array<{
+    metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
+  }>;
   gateways: Array<{ metadata: { name: string; namespace?: string; uid?: string } }>;
   /** null means not readable: still loading, or RBAC refused it. */
   namespaces: Array<{ metadata: { name: string; labels?: Record<string, string> } }> | null;
@@ -160,16 +163,23 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
   // A use-waypoint label is a string, not a guarantee. Checking it against the
   // Gateways that exist is what separates "a waypoint handles this" from "a
   // label mentions a waypoint", and a typo produces exactly the second.
-  const live = bindings.filter(
-    b =>
-      b.name &&
-      !b.disabled &&
-      waypoints.some(
-        w => w.metadata.name === b.name && w.metadata.namespace === (b.namespace ?? policyNs)
-      )
-  );
+  const backing = (b: (typeof bindings)[number]) =>
+    waypoints.find(
+      w => w.metadata.name === b.name && w.metadata.namespace === (b.namespace ?? policyNs)
+    );
+  const live = bindings.filter(b => b.name && !b.disabled && backing(b));
 
-  if (live.length === bindings.length && live.length > 0) {
+  // A waypoint labelled waypoint-for=workload (or none) never sees traffic
+  // addressed to a Service, so istiod does not bind the Service to it and the
+  // policy falls through to ztunnel. The label names a real waypoint, which is
+  // what made this read as covered.
+  const serviceWaypoint = (b: (typeof bindings)[number]) => {
+    const handles = backing(b)?.metadata.labels?.[WAYPOINT_FOR] ?? 'service';
+    return handles === 'service' || handles === 'all';
+  };
+  const wrongKind = live.filter(b => !serviceWaypoint(b));
+
+  if (live.length === bindings.length && live.length > 0 && wrongKind.length === 0) {
     return {
       state: 'covered',
       requirements,
@@ -189,6 +199,17 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
         ),
       ],
       targetKind: 'waypoint Gateway',
+    };
+  }
+
+  if (wrongKind.length > 0) {
+    const names = [...new Set(wrongKind.map(b => `${b.namespace ?? policyNs}/${b.name}`))];
+    return {
+      state: 'ztunnel-denies',
+      requirements,
+      reason: `${names.join(
+        ', '
+      )} does not handle Service traffic (${WAYPOINT_FOR} is not service or all), so ztunnel enforces the policy`,
     };
   }
 

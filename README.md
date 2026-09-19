@@ -297,6 +297,10 @@ publishes the release tarball, updates Artifact Hub metadata, and then calls
 **Publish GitHub Package** to publish the same artifact to GHCR for `linux/amd64`
 and `linux/arm64`. Container tags use the exact version (for example, `0.1.4`).
 
+The changelog is built from commit subjects since the previous tag: `feat:` becomes
+*added*, `fix:` *fixed* and `security:` *security*, in both the GitHub release notes and the
+`changes` list Artifact Hub shows in the catalogue. Write those subjects for users.
+
 If image publication fails after the release succeeds, rerun **Publish GitHub Package**
 with that existing release version; do not recreate the release. On first publication,
 set the package's visibility to **Public** in GitHub's package settings so clusters can

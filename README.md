@@ -262,6 +262,17 @@ npm test
 python3 scripts/capture-fixtures.py --context kind-istio-dev   # refresh fixtures
 ```
 
+`e2e/` holds Playwright tests that load the built plugin into a real Headlamp and check the
+pages against the sample mesh: the Istio pages, the L7 enforcement warning, and the sections
+added to Headlamp's own Service and Namespace pages. `dev/e2e.sh` starts Headlamp in Docker
+on the local dev cluster and runs them; the **E2E** workflow does the same on every push to
+`main`.
+
+```sh
+./dev/kind-istio-ambient.sh   # once
+./dev/e2e.sh                  # extra args go to `playwright test`
+```
+
 ## Layout
 
 ```

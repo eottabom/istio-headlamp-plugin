@@ -8,3 +8,5 @@ coverage/
 storybook-static/
 .gstack/
 plugins/
+test-results/
+playwright-report/

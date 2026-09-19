@@ -1,0 +1,11 @@
+{
+  "name": "istio-headlamp-plugin-e2e",
+  "private": true,
+  "description": "Browser tests against a live Headlamp with the plugin loaded. See dev/e2e.sh.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2"
+  }
+}

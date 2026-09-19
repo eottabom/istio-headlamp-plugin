@@ -1,0 +1,68 @@
+name: E2E
+
+# Browser tests against Headlamp on a kind cluster running Istio ambient.
+# Slower than CI (a cluster and a mesh come up first), so it runs after merge
+# and on demand rather than on every pull request push.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ISTIO_VERSION: 1.30.1
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            e2e/package-lock.json
+
+      - run: npm ci
+
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      - name: Install istioctl
+        run: |
+          curl -fsSL https://istio.io/downloadIstio | ISTIO_VERSION="$ISTIO_VERSION" sh -
+          echo "$PWD/istio-${ISTIO_VERSION}/bin" >>"$GITHUB_PATH"
+
+      - name: Cluster with Istio ambient
+        run: ./dev/kind-istio-ambient.sh
+
+      - name: Wait for sample workloads
+        run: kubectl -n shop wait --for=condition=Ready pod --all --timeout=180s
+
+      - name: Install Playwright browser
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: E2E
+        run: ./dev/e2e.sh
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7

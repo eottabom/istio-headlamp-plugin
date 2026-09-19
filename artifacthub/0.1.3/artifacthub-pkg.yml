@@ -1,0 +1,86 @@
+# Package metadata ArtifactHub reads on every scan of this repository.
+#
+# version, archive-url and archive-checksum must agree with a published GitHub
+# release, or Headlamp's plugin catalogue will fail the integrity check on
+# install. The Release workflow keeps all three in step; do not hand-edit them.
+version: 0.1.3
+name: istio-headlamp-plugin
+displayName: Istio
+createdAt: "2026-09-18T13:29:20Z"
+description: >-
+  Istio service mesh UI with first-class ambient mode support. Shows every
+  resource's spec without opening the editor, surfaces waypoints and namespace
+  enrolment, and flags L7 authorization policies that nothing enforces.
+license: Apache-2.0
+homeURL: https://github.com/eottabom/istio-headlamp-plugin
+logoURL: https://raw.githubusercontent.com/cncf/artwork/main/projects/istio/icon/color/istio-icon-color.svg
+keywords:
+  - istio
+  - service-mesh
+  - ambient
+  - waypoint
+  - networking
+  - security
+links:
+  - name: source
+    url: https://github.com/eottabom/istio-headlamp-plugin
+maintainers:
+  - name: eottabom
+    email: snoopy12oyk@gmail.com
+screenshots:
+  - title: Mesh Overview
+    url: https://raw.githubusercontent.com/eottabom/istio-headlamp-plugin/main/docs/images/mesh-overview.png
+  - title: L7 enforcement check on an AuthorizationPolicy
+    url: https://raw.githubusercontent.com/eottabom/istio-headlamp-plugin/main/docs/images/l7-enforcement.png
+  - title: DestinationRule detail, rendered from the spec
+    url: https://raw.githubusercontent.com/eottabom/istio-headlamp-plugin/main/docs/images/destinationrule.png
+  - title: Waypoint coverage
+    url: https://raw.githubusercontent.com/eottabom/istio-headlamp-plugin/main/docs/images/waypoints.png
+  - title: Istio context on a Service page
+    url: https://raw.githubusercontent.com/eottabom/istio-headlamp-plugin/main/docs/images/service-context.png
+install: |
+  ### From Headlamp
+
+  Open **Plugins** in the Headlamp sidebar, find **Istio**, and click Install.
+
+  ### Desktop app, by hand
+
+  Unpack the release tarball into Headlamp's plugin directory:
+
+  ```sh
+  VERSION=0.1.3
+  mkdir -p ~/.config/Headlamp/plugins
+  curl -fsSL "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz" \
+    | tar xz -C ~/.config/Headlamp/plugins
+  ```
+
+  ### From source
+
+  ```sh
+  git clone https://github.com/eottabom/istio-headlamp-plugin.git
+  cd istio-headlamp-plugin
+  npm install && npm run build && npm run package
+  ```
+
+  ### Headlamp in a cluster or container
+
+  Unpack the same tarball into the directory Headlamp serves plugins from:
+
+  ```sh
+  headlamp -plugins-dir=/headlamp/plugins
+  ```
+
+  ### What it needs
+
+  Read access to the Istio CRDs (`networking.istio.io`, `security.istio.io`,
+  `telemetry.istio.io`, `extensions.istio.io`), to Gateway API `Gateway` objects, and to
+  Namespaces, Services, Pods, Deployments and DaemonSets. Views that cannot read something
+  say so rather than guessing.
+annotations:
+  headlamp/plugin/archive-url: "https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.3/istio-headlamp-plugin-0.1.3.tar.gz"
+  headlamp/plugin/archive-checksum: "SHA256:b28961b55cdf3b8f950703cfd80423de3d2362ef3449669f278be0fb09be76e8"
+  # Registry APIs this plugin uses: registerRoute, registerSidebarEntry,
+  # registerDetailsViewSection and registerResourceTableColumnsProcessor. The
+  # last of those sets the floor; the others are far older.
+  headlamp/plugin/version-compat: ">=0.23"
+  headlamp/plugin/distro-compat: in-cluster,web,docker-desktop,desktop

@@ -19,8 +19,9 @@ permissions:
 # the manifest update as one unit.
 #
 # The manifest matters more than it looks. ArtifactHub hosts nothing: it reads
-# artifacthub-pkg.yml from the default branch and fetches the tarball named by
-# archive-url, checking it against archive-checksum. If those disagree the
+# artifacthub/<version>/artifacthub-pkg.yml from the default branch, one
+# directory per release so the catalogue keeps every version, and fetches the
+# tarball named by archive-url, checking it against archive-checksum. If those disagree the
 # plugin still appears in the catalogue but fails to install. So the checksum
 # is taken from the tarball this job publishes, never guessed beforehand.
 jobs:
@@ -81,7 +82,20 @@ jobs:
           echo "tarball=$tarball" >>"$GITHUB_OUTPUT"
           echo "checksum=$(sha256sum "$tarball" | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
 
-      - name: Update artifacthub-pkg.yml
+      # Each release gets its own manifest, started from the newest existing one
+      # so descriptions, screenshots and install notes carry forward. Earlier
+      # directories are never touched: their checksums match their tarballs.
+      - name: Manifest for this version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          newest="$(ls artifacthub | sort -V | tail -n 1)"
+          manifest="artifacthub/${VERSION}/artifacthub-pkg.yml"
+          mkdir -p "artifacthub/${VERSION}"
+          [ -f "$manifest" ] || cp "artifacthub/${newest}/artifacthub-pkg.yml" "$manifest"
+          echo "MANIFEST=$manifest" >>"$GITHUB_ENV"
+
+      - name: Update the manifest
         env:
           VERSION: ${{ inputs.version }}
           TARBALL: ${{ steps.package.outputs.tarball }}
@@ -89,11 +103,11 @@ jobs:
         run: |
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${TARBALL}"
           python3 - "$VERSION" "$url" "$CHECKSUM" <<'PY'
-          import re, sys
+          import os, re, sys
           from datetime import datetime, timezone
 
           version, url, checksum = sys.argv[1:4]
-          path = 'artifacthub-pkg.yml'
+          path = os.environ['MANIFEST']
           s = open(path).read()
           s = re.sub(r'^version: .*$', f'version: {version}', s, count=1, flags=re.M)
           # createdAt is what the catalogue prints as the update date, so it has
@@ -120,14 +134,14 @@ jobs:
           # The catalogue install instructions pin a version in a shell snippet. Left
           # alone they keep telling people to download the previous release.
           sed -i -E "s/^([[:space:]]*)VERSION=[0-9]+\.[0-9]+\.[0-9]+$/\1VERSION=${VERSION}/" \
-            artifacthub-pkg.yml
+            "$MANIFEST"
 
           # Keep the clickable release asset link in both install guides current.
-          sed -i -E "s@releases/download/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?/istio-headlamp-plugin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tar\.gz@releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz@g; s@\[istio-headlamp-plugin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tar\.gz\]@[istio-headlamp-plugin-${VERSION}.tar.gz]@g" \
-            artifacthub-pkg.yml
+          sed -i -E "s@releases/download/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?/istio-headlamp-plugin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tar\.gz@releases/download/v${VERSION}/istio-headlamp-plugin-${VERSION}.tar.gz@g; s@\[(\`?)istio-headlamp-plugin-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tar\.gz(\`?)\]@[\1istio-headlamp-plugin-${VERSION}.tar.gz\3]@g" \
+            "$MANIFEST"
 
           sed -i -E "s@(ghcr.io/${GITHUB_REPOSITORY}:)[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?@\1${VERSION}@g" \
-            artifacthub-pkg.yml
+            "$MANIFEST"
 
       # Artifact Hub shows `changes` as the release's changelog in the catalogue.
       # Built from the conventional-commit subjects since the previous tag, so
@@ -140,7 +154,7 @@ jobs:
           prev="$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)"
           git log --no-merges --format=%s ${prev:+"$prev"..HEAD} >"$RUNNER_TEMP/subjects"
           python3 - "$RUNNER_TEMP/subjects" "$RUNNER_TEMP/notes.md" <<'PY'
-          import re, sys
+          import os, re, sys
 
           kinds = {'feat': 'added', 'fix': 'fixed', 'security': 'security'}
           changes = []
@@ -151,7 +165,7 @@ jobs:
                   changes.append((kinds[m.group(1)], text[0].upper() + text[1:]))
           changes.reverse()  # oldest first reads as a story
 
-          path = 'artifacthub-pkg.yml'
+          path = os.environ['MANIFEST']
           s = open(path).read()
           s = re.sub(r'^changes:\n(?:[ -].*\n)*', '', s, flags=re.M)
           if changes:
@@ -177,7 +191,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json artifacthub-pkg.yml
+          git add package.json package-lock.json "$MANIFEST"
           # Nothing to commit when re-releasing an identical tree; the tag and
           # the release still need to happen.
           git diff --cached --quiet || git commit -m "release: v${VERSION}"

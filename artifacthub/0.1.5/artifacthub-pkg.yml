@@ -56,7 +56,7 @@ screenshots:
 install: |
   ### Download the GitHub release package
 
-  Download [`istio-headlamp-plugin-0.1.4.tar.gz`](https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.5/istio-headlamp-plugin-0.1.5.tar.gz)
+  Download [`istio-headlamp-plugin-0.1.5.tar.gz`](https://github.com/eottabom/istio-headlamp-plugin/releases/download/v0.1.5/istio-headlamp-plugin-0.1.5.tar.gz)
   from [GitHub Releases](https://github.com/eottabom/istio-headlamp-plugin/releases).
   Use the plugin `.tar.gz` asset under **Assets**, not GitHub's **Source code** archives.
   The package contains the built plugin; Node.js and npm are not needed to install it.

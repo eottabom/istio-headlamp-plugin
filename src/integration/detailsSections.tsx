@@ -147,7 +147,7 @@ export function ServiceIstioSection({ resource }: { resource: KubeObject }) {
             ) : waypoint.disabled ? (
               <Chip size="small" label="explicitly disabled" variant="outlined" />
             ) : waypoint.name ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1 }}>
                 <Link
                   routeName="gateway"
                   params={{ name: waypoint.name, namespace: waypoint.namespace ?? namespace }}
@@ -173,7 +173,7 @@ export function ServiceIstioSection({ resource }: { resource: KubeObject }) {
                 {r.label}
               </Typography>
             ),
-            width: '22rem',
+            width: '40%',
           },
           { label: ' ', render: r => r.value },
         ]}
@@ -230,7 +230,7 @@ export function PodIstioSection({ resource }: { resource: KubeObject }) {
                 {r.label}
               </Typography>
             ),
-            width: '14rem',
+            width: '40%',
           },
           { label: ' ', render: r => r.value },
         ]}
@@ -289,7 +289,7 @@ export function NamespaceIstioSection({ resource }: { resource: KubeObject }) {
           {
             label: 'Effective mTLS',
             value: effective ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1 }}>
                 <EnumChip
                   value={effective.mtlsMode}
                   good={['STRICT']}
@@ -316,7 +316,7 @@ export function NamespaceIstioSection({ resource }: { resource: KubeObject }) {
                 {r.label}
               </Typography>
             ),
-            width: '14rem',
+            width: '40%',
           },
           { label: ' ', render: r => r.value },
         ]}

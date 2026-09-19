@@ -9,6 +9,7 @@ import { useMeshStatus, useRootNamespace } from '../lib/detect';
 import { hostMatchesService } from '../lib/host';
 import { USE_WAYPOINT } from '../lib/labels';
 import { namespaceMeshState, podMeshState, resolveWaypoint } from '../lib/mesh';
+import { policiesForService } from '../lib/servicePolicies';
 import { detailRouteName, IstioObject } from '../resources/base';
 import { DestinationRule, ServiceEntry, VirtualService } from '../resources/networking';
 import { AuthorizationPolicy, PeerAuthentication } from '../resources/security';
@@ -79,8 +80,11 @@ export function ServiceIstioSection({ resource }: { resource: KubeObject }) {
   const [virtualServices] = VirtualService.useList();
   const [destinationRules] = DestinationRule.useList();
   const [serviceEntries] = ServiceEntry.useList();
-  const [policies] = AuthorizationPolicy.useList({ namespace });
+  // Cluster-wide: mesh-wide policies sit in the root namespace, and a waypoint
+  // policy sits wherever the waypoint does.
+  const [policies] = AuthorizationPolicy.useList();
   const [namespaces] = K8s.ResourceClasses.Namespace.useList();
+  const rootNamespace = useRootNamespace();
 
   const ns = (namespaces ?? []).find(n => n.metadata.name === namespace) ?? null;
   const waypoint = resolveWaypoint(resource, ns as any);
@@ -96,16 +100,28 @@ export function ServiceIstioSection({ resource }: { resource: KubeObject }) {
     const se = (serviceEntries ?? []).filter(s =>
       (s.spec.hosts ?? []).some(h => hostMatchesService(h, name, namespace, s.metadata.namespace))
     );
-    const ap = (policies ?? []).filter(p => {
-      if (p.targetRefs.length > 0) {
-        return p.targetRefs.some(r => (r.kind ?? 'Service') === 'Service' && r.name === name);
-      }
-      // Selector-based policies match pods, not services; report namespace-wide
-      // ones since they unambiguously cover this service's backends.
-      return p.attachmentKind === 'namespace';
+    const ap = policiesForService(policies ?? [], {
+      name,
+      namespace,
+      rootNamespace,
+      waypoint:
+        waypoint.name && !waypoint.disabled
+          ? { name: waypoint.name, namespace: waypoint.namespace ?? namespace }
+          : undefined,
     });
     return { vs, dr, se, ap };
-  }, [virtualServices, destinationRules, serviceEntries, policies, name, namespace]);
+  }, [
+    virtualServices,
+    destinationRules,
+    serviceEntries,
+    policies,
+    name,
+    namespace,
+    rootNamespace,
+    waypoint.name,
+    waypoint.namespace,
+    waypoint.disabled,
+  ]);
 
   const total = matched.vs.length + matched.dr.length + matched.se.length + matched.ap.length;
   if (total === 0 && !waypoint.name) return null;

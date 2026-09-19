@@ -7,8 +7,13 @@ import { L7Inputs, L7Subject, resolveL7Coverage } from '../lib/l7decision';
  * than no answer, because nobody looks again after being reassured.
  */
 
-const waypoint = (name: string, namespace: string, uid = `${namespace}/${name}`) => ({
-  metadata: { name, namespace, uid },
+const waypoint = (
+  name: string,
+  namespace: string,
+  uid = `${namespace}/${name}`,
+  labels: Record<string, string> = {}
+) => ({
+  metadata: { name, namespace, uid, labels },
 });
 
 const service = (name: string, namespace: string, labels: Record<string, string> = {}) => ({
@@ -132,6 +137,27 @@ describe('resolveL7Coverage', () => {
       READY
     );
     expect(result.state).toBe('dangling');
+  });
+
+  // A waypoint that only handles workload traffic is never bound to the
+  // Service, so the policy lands on ztunnel even though the label is valid.
+  it('does not credit a workload-only waypoint for a Service targetRef', () => {
+    const result = resolveL7Coverage(policy(), {
+      ...READY,
+      waypoints: [
+        waypoint('shop-waypoint', 'shop', undefined, { 'istio.io/waypoint-for': 'workload' }),
+      ],
+    });
+    expect(result.state).toBe('ztunnel-denies');
+    expect(result).toMatchObject({ reason: expect.stringContaining('shop/shop-waypoint') });
+  });
+
+  it('credits a waypoint that handles all traffic', () => {
+    const result = resolveL7Coverage(policy(), {
+      ...READY,
+      waypoints: [waypoint('shop-waypoint', 'shop', undefined, { 'istio.io/waypoint-for': 'all' })],
+    });
+    expect(result.state).toBe('covered');
   });
 
   /* ------------------------------ mixed targets ------------------------------ */

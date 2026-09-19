@@ -7,7 +7,7 @@ import { EnumChip, MeshBadge } from '../components/common/Badges';
 import { Mono, SpecTable } from '../components/detail/Table';
 import { useMeshStatus, useRootNamespace } from '../lib/detect';
 import { hostMatchesService } from '../lib/host';
-import { USE_WAYPOINT } from '../lib/labels';
+import { REVISION, USE_WAYPOINT } from '../lib/labels';
 import { namespaceMeshState, podMeshState, resolveWaypoint } from '../lib/mesh';
 import { policiesForService } from '../lib/servicePolicies';
 import { detailRouteName, IstioObject } from '../resources/base';
@@ -273,7 +273,19 @@ export function NamespaceIstioSection({ resource }: { resource: KubeObject }) {
               </Typography>
             ),
           },
-          { label: 'Revision', value: <Mono>{state.revision}</Mono> },
+          {
+            label: 'Revision',
+            // Without an istio.io/rev label the default revision serves the
+            // namespace, which a bare dash does not say.
+            value:
+              state.revision || (state.mode !== 'ambient' && state.mode !== 'sidecar') ? (
+                <Mono>{state.revision}</Mono>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  default (no {REVISION} label)
+                </Typography>
+              ),
+          },
           {
             label: 'Default waypoint',
             value: waypoint.disabled ? (

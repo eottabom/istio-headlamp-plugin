@@ -1,11 +1,11 @@
 import { DetailsGrid, SectionBox } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { IstioObject } from '../../resources/base';
 import { AppliesTo } from './Badges';
+import { FullSpec } from './FullSpec';
 import { Row } from './SpecSection';
-import { SpecTree } from './SpecTree';
 
 export interface IstioDetailProps<T extends IstioObject = IstioObject> {
   resourceClass: any;
@@ -64,11 +64,7 @@ export function GenericDetail<T extends IstioObject>({
 
           nodes.push(
             <SectionBox key="full-spec" title="Full spec">
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Every field of <code>.spec</code>, including anything the sections above do not
-                cover.
-              </Typography>
-              <SpecTree value={item.jsonData.spec} />
+              <FullSpec value={item.jsonData.spec} storageKey="istio-plugin.full-spec-view" />
             </SectionBox>
           );
 
@@ -76,7 +72,7 @@ export function GenericDetail<T extends IstioObject>({
           if (status && Object.keys(status).length > 0) {
             nodes.push(
               <SectionBox key="status" title="Status">
-                <SpecTree value={status} />
+                <FullSpec value={status} storageKey="istio-plugin.full-spec-view" />
               </SectionBox>
             );
           }

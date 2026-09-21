@@ -48,6 +48,34 @@ test('DestinationRule detail renders traffic policy and subsets', async ({ page 
   await expect(page.getByRole('heading', { name: /Subsets/ })).toBeVisible();
 });
 
+// The full spec leads with the tree and offers YAML behind the toggle, for
+// reading the document as written and copying it back out.
+test('Full spec shows the tree and switches to YAML', async ({ page }) => {
+  await go(page, '/istio/virtualservices/shop/reviews');
+  await expect(page.getByText('Full spec')).toBeVisible();
+  await expect(page.getByText('[0] canary')).toBeVisible();
+
+  await page.getByRole('button', { name: 'YAML' }).click();
+  await expect(page.locator('pre').filter({ hasText: 'hosts:' }).first()).toContainText(
+    'reviews.shop.svc.cluster.local'
+  );
+
+  await page.getByRole('button', { name: 'Tree' }).click();
+  await expect(page.getByText('[0] canary')).toBeVisible();
+});
+
+// The mesh default lives in a ConfigMap, not in ProxyConfig resources, and the
+// page was empty on clusters configured entirely through that ConfigMap.
+test('Proxy Configs shows the mesh default and the overrides', async ({ page }) => {
+  await go(page, '/istio/proxyconfigs');
+  await expect(page.getByRole('heading', { name: 'Mesh default' })).toBeVisible();
+  await expect(page.getByText('istiod.istio-system.svc:15012')).toBeVisible();
+  await expect(page.getByText('istio-system/istio')).toBeVisible();
+
+  await expect(page.getByRole('heading', { name: 'Overrides (ProxyConfig)' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'shop-proxy' })).toBeVisible();
+});
+
 test('an L7 policy enforced by ztunnel is flagged as denying', async ({ page }) => {
   await go(page, '/istio/authorizationpolicies/shop/orders-l7-denied');
   await expect(page.getByText('ztunnel will deny traffic matched by this policy')).toBeVisible();

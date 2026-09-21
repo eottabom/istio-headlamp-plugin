@@ -143,6 +143,15 @@ jobs:
           sed -i -E "s@(ghcr.io/${GITHUB_REPOSITORY}:)[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?@\1${VERSION}@g" \
             "$MANIFEST"
 
+      # ArtifactHub renders `readme` as the package page. Regenerating it from
+      # README.md here is what keeps the two from drifting: the manifest is
+      # rewritten every release anyway, so the page follows the repository
+      # without anyone remembering to copy it across. An inline field rather
+      # than a README.md beside the manifest, which would commit a second copy
+      # of the README for every release.
+      - name: Package README for the catalogue
+        run: python3 scripts/artifacthub-readme.py README.md --manifest "$MANIFEST"
+
       # Artifact Hub shows `changes` as the release's changelog in the catalogue.
       # Built from the conventional-commit subjects since the previous tag, so
       # it needs no hand-kept file: feat -> added, fix -> fixed, security ->

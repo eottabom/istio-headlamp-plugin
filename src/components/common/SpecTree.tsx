@@ -1,5 +1,4 @@
-import { Icon } from '@iconify/react';
-import { Box, Button, Chip, Collapse, IconButton, Typography, useTheme } from '@mui/material';
+import { Box, Button, Chip, Collapse, Typography, useTheme } from '@mui/material';
 import { ReactNode, useState } from 'react';
 
 /**
@@ -112,6 +111,175 @@ function ScalarList({ items }: { items: unknown[] }) {
   );
 }
 
+/**
+ * Keys whose value is user data rather than a nested schema object: labels,
+ * annotations, environment variables. Walking into them adds a level of
+ * indentation to show a flat list of key=value pairs, and their keys must not
+ * be prettified (`app` is a label name, not the word "App").
+ */
+const FREE_FORM_MAPS = new Set([
+  'labels',
+  'matchLabels',
+  'annotations',
+  'proxyMetadata',
+  'environmentVariables',
+  'env',
+  'nodeSelector',
+  'customTags',
+]);
+
+function isFlatMap(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value).length > 0 &&
+    Object.values(value).every(v => v === null || typeof v !== 'object')
+  );
+}
+
+function MapChips({ map }: { map: Record<string, unknown> }) {
+  return <ScalarList items={Object.entries(map).map(([k, v]) => `${k}=${String(v)}`)} />;
+}
+
+/**
+ * `selector` -> `matchLabels` -> ... is three levels of chrome around one
+ * value. A chain of single-key objects collapses into one heading, so the
+ * shape stays visible without the reader walking down a staircase.
+ */
+function flattenChain(key: string, value: unknown): { label: string; value: unknown } {
+  let label = humanizeKey(key);
+  let current = value;
+  while (
+    current !== null &&
+    typeof current === 'object' &&
+    !Array.isArray(current) &&
+    Object.keys(current as object).length === 1
+  ) {
+    const [childKey, childValue] = Object.entries(current as Record<string, unknown>)[0];
+    if (childValue === null || typeof childValue !== 'object' || Array.isArray(childValue)) break;
+    if (FREE_FORM_MAPS.has(childKey) && isFlatMap(childValue)) break;
+    label = `${label} › ${humanizeKey(childKey)}`;
+    current = childValue;
+  }
+  return { label, value: current };
+}
+
+/**
+ * A heading for one entry of a list of objects.
+ *
+ * The index leads, because order is meaningful in route and filter lists and
+ * it is how the API, `istioctl` and every error message refer to an entry.
+ * Istio sub-objects usually carry something identifying too -- a name, a host,
+ * an operation -- and appending it saves opening each node to find the one
+ * rule you came for.
+ */
+const SUMMARY_KEYS = [
+  'name',
+  'host',
+  'hosts',
+  'applyTo',
+  'operation',
+  'kind',
+  'key',
+  'issuer',
+  'port',
+  'number',
+  'mode',
+  'prefix',
+  'provider',
+  'service',
+];
+
+function summarise(item: unknown, index: number): string {
+  const fallback = `[${index}]`;
+  if (item === null || typeof item !== 'object' || Array.isArray(item)) return fallback;
+
+  const obj = item as Record<string, unknown>;
+  for (const key of SUMMARY_KEYS) {
+    const value = obj[key];
+    if (typeof value === 'string' || typeof value === 'number') return `[${index}] ${value}`;
+    if (Array.isArray(value) && (typeof value[0] === 'string' || typeof value[0] === 'number')) {
+      const more = value.length > 1 ? ` +${value.length - 1}` : '';
+      return `[${index}] ${value[0]}${more}`;
+    }
+    if (value !== null && typeof value === 'object') {
+      const nested = Object.values(value as Record<string, unknown>).find(
+        v => typeof v === 'string' || typeof v === 'number'
+      );
+      if (nested !== undefined) return `[${index}] ${nested}`;
+    }
+  }
+  // Nothing identifying: name the entry after what it configures, which at
+  // least distinguishes a header match from a path match.
+  const firstKey = Object.keys(obj)[0];
+  return firstKey ? `[${index}] ${humanizeKey(firstKey)}` : fallback;
+}
+
+/** An object whose values are all scalars, so it fits one table row. */
+function isRowLike(value: unknown): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.values(value).every(v => v === null || typeof v !== 'object')
+  );
+}
+
+const TABLE_MAX_COLUMNS = 6;
+
+/**
+ * A list of flat objects is a table: ports, subsets, endpoints, JWT rules. A
+ * stack of collapsed nodes made the reader open each one to compare fields
+ * that line up perfectly in columns.
+ */
+function ObjectTable({ items }: { items: Record<string, unknown>[] }) {
+  const columns = [...new Set(items.flatMap(item => Object.keys(item)))];
+  return (
+    <Box sx={{ overflowX: 'auto' }}>
+      <Box component="table" sx={{ borderCollapse: 'collapse', width: '100%' }}>
+        <Box component="thead">
+          <Box component="tr">
+            {columns.map(column => (
+              <Box
+                key={column}
+                component="th"
+                sx={{
+                  textAlign: 'left',
+                  px: 1,
+                  py: 0.5,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  {humanizeKey(column)}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Box component="tbody">
+          {items.map((item, i) => (
+            <Box key={i} component="tr">
+              {columns.map(column => (
+                <Box
+                  key={column}
+                  component="td"
+                  sx={{ px: 1, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
+                >
+                  {item[column] === undefined ? <Muted>—</Muted> : <Scalar value={item[column]} />}
+                </Box>
+              ))}
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 function ArrayNode({
   items,
   collapseDepth,
@@ -128,10 +296,25 @@ function ArrayNode({
   if (allScalar) {
     return <ScalarList items={items} />;
   }
+  // One entry needs no numbering: the parent heading already names it, and
+  // "Match > Item 1 > ..." is a click and a level for nothing.
+  if (items.length === 1) {
+    return <SpecTree value={items[0]} collapseDepth={collapseDepth} depth={depth} />;
+  }
+  if (items.every(isRowLike)) {
+    const columns = new Set(items.flatMap(item => Object.keys(item)));
+    if (columns.size <= TABLE_MAX_COLUMNS) {
+      return <ObjectTable items={items as Record<string, unknown>[]} />;
+    }
+  }
   return (
     <Box>
       {items.map((item, i) => (
-        <Nested key={i} label={`[${i}]`} startOpen={depth < collapseDepth && items.length <= 8}>
+        <Nested
+          key={i}
+          label={summarise(item, i)}
+          startOpen={depth < collapseDepth && items.length <= 8}
+        >
           <SpecTree value={item} collapseDepth={collapseDepth} depth={depth + 1} />
         </Nested>
       ))}
@@ -162,12 +345,46 @@ function ObjectNode({
       }}
     >
       {entries.map(([key, val]) => {
+        // Label maps and environment variables read as chips on one row.
+        if (FREE_FORM_MAPS.has(key) && isFlatMap(val)) {
+          return (
+            <Box key={key} sx={{ display: 'contents' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ pt: 0.25 }}>
+                {humanizeKey(key)}
+              </Typography>
+              <Box sx={{ minWidth: 0 }}>
+                <MapChips map={val} />
+              </Box>
+            </Box>
+          );
+        }
+
+        // A list of plain values is chips on one row; wrapping it in a
+        // collapsible node hid `hosts: [one entry]` behind a click.
+        if (
+          Array.isArray(val) &&
+          val.length > 0 &&
+          val.every(v => v === null || typeof v !== 'object')
+        ) {
+          return (
+            <Box key={key} sx={{ display: 'contents' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ pt: 0.25 }}>
+                {humanizeKey(key)}
+              </Typography>
+              <Box sx={{ minWidth: 0 }}>
+                <ScalarList items={val} />
+              </Box>
+            </Box>
+          );
+        }
+
         const isComplex = val !== null && typeof val === 'object';
         if (isComplex) {
+          const chain = flattenChain(key, val);
           return (
             <Box key={key} sx={{ gridColumn: '1 / -1' }}>
-              <Nested label={humanizeKey(key)} startOpen={depth < collapseDepth}>
-                <SpecTree value={val} collapseDepth={collapseDepth} depth={depth + 1} />
+              <Nested label={chain.label} startOpen={depth < collapseDepth}>
+                <SpecTree value={chain.value} collapseDepth={collapseDepth} depth={depth + 1} />
               </Nested>
             </Box>
           );
@@ -200,28 +417,60 @@ function Nested({
   const theme = useTheme();
   return (
     <Box sx={{ mt: 0.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <IconButton
-          size="small"
-          onClick={() => setOpen(o => !o)}
-          aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
+      {/*
+        One clickable row: a [+]/[-] box and the heading. The chevron icon
+        button was taller than the row it introduced, which is most of why a
+        few nested fields filled the screen.
+      */}
+      <Box
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen(o => !o);
+          }
+        }}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.75,
+          cursor: 'pointer',
+          userSelect: 'none',
+          borderRadius: 0.5,
+          px: 0.25,
+          '&:hover': { bgcolor: 'action.hover' },
+        }}
+      >
+        <Box
+          component="span"
+          aria-hidden
+          sx={{
+            width: 14,
+            height: 14,
+            lineHeight: '12px',
+            textAlign: 'center',
+            fontFamily: 'monospace',
+            fontSize: '0.8rem',
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 0.5,
+            color: 'text.secondary',
+          }}
         >
-          <Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={18} />
-        </IconButton>
-        <Typography
-          variant="body2"
-          sx={{ fontWeight: 600, cursor: 'pointer' }}
-          onClick={() => setOpen(o => !o)}
-        >
+          {open ? '−' : '+'}
+        </Box>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
           {label}
         </Typography>
       </Box>
       <Collapse in={open} unmountOnExit>
         <Box
           sx={{
-            ml: 1.75,
+            ml: '6px',
             pl: 1.5,
-            borderLeft: `2px solid ${theme.palette.divider}`,
+            borderLeft: `1px solid ${theme.palette.divider}`,
           }}
         >
           {children}

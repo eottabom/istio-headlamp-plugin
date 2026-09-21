@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hostMatchesService, parseHost, serviceFqdn } from '../lib/host';
-import {
-  istioInfraRole,
-  meshRootNamespace,
-  namespaceMeshState,
-  podMeshState,
-  resolveWaypoint,
-} from '../lib/mesh';
+import { istioInfraRole, namespaceMeshState, podMeshState, resolveWaypoint } from '../lib/mesh';
 import { namespaces, pods, services, waypoints } from './fixtures';
 
 const ns = (name: string) => namespaces.find(n => n.metadata.name === name);
@@ -226,21 +220,5 @@ describe('hostMatchesService', () => {
 
   it('builds the canonical FQDN', () => {
     expect(serviceFqdn('reviews', 'shop')).toBe('reviews.shop.svc.cluster.local');
-  });
-});
-
-describe('meshRootNamespace', () => {
-  it('reads a custom rootNamespace from the meshConfig', () => {
-    expect(meshRootNamespace('enablePrometheusMerge: true\nrootNamespace: mesh-root\n')).toBe(
-      'mesh-root'
-    );
-  });
-
-  it('ignores nested keys of the same name', () => {
-    expect(meshRootNamespace('defaultConfig:\n  rootNamespace: nested\n')).toBe('istio-system');
-  });
-
-  it('falls back to istio-system without a meshConfig', () => {
-    expect(meshRootNamespace(undefined)).toBe('istio-system');
   });
 });

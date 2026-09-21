@@ -1,12 +1,11 @@
 import { K8s } from '@kinvolk/headlamp-plugin/lib';
 import { useMemo } from 'react';
 import { ISTIO_SYSTEM_NAMESPACE, WAYPOINT_GATEWAY_CLASS } from './labels';
-import { meshRootNamespace } from './mesh';
+import { meshRootNamespace, useMeshConfig } from './meshConfig';
 
 const CRD = K8s.ResourceClasses.CustomResourceDefinition;
 const Deployment = K8s.ResourceClasses.Deployment;
 const DaemonSet = K8s.ResourceClasses.DaemonSet;
-const ConfigMap = K8s.ResourceClasses.ConfigMap;
 const GatewayClass = K8s.ResourceClasses.Gateway;
 
 export interface IstioCrdInfo {
@@ -120,17 +119,10 @@ export function istiodVersion(istiod: any[]): string | undefined {
 
 /**
  * The mesh root namespace, where mesh-wide PeerAuthentication and
- * AuthorizationPolicy live. Read from the default revision's `istio`
- * ConfigMap; falls back to `istio-system` when that is missing or unreadable.
+ * AuthorizationPolicy live. Falls back to `istio-system` when the mesh config
+ * is missing or unreadable.
  */
 export function useRootNamespace(): string {
-  const [configMaps] = ConfigMap.useList({ namespace: ISTIO_SYSTEM_NAMESPACE });
-  return useMemo(() => {
-    const cm =
-      (configMaps ?? []).find(c => c.metadata.name === 'istio') ??
-      (configMaps ?? []).find(
-        c => /^istio-[a-z0-9-]+$/.test(c.metadata.name) && (c.jsonData as any)?.data?.mesh
-      );
-    return meshRootNamespace((cm?.jsonData as any)?.data?.mesh);
-  }, [configMaps]);
+  const { meshConfig } = useMeshConfig();
+  return meshRootNamespace(meshConfig);
 }

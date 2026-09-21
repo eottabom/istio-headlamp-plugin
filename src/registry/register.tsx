@@ -117,15 +117,18 @@ function registerResource(def: IstioResourceDef, parent: string) {
     exact: true,
     name: listRoute,
     sidebar: { item: listRoute, sidebar: 'IN-CLUSTER' },
-    component: () => (
-      <GenericList
-        id={`istio-${def.id}`}
-        title={def.title ?? def.pluralLabel}
-        resourceClass={def.cls}
-        columns={def.columns}
-        description={def.description}
-      />
-    ),
+    component: () =>
+      def.listComponent ? (
+        def.listComponent()
+      ) : (
+        <GenericList
+          id={`istio-${def.id}`}
+          title={def.title ?? def.pluralLabel}
+          resourceClass={def.cls}
+          columns={def.columns}
+          description={def.description}
+        />
+      ),
   });
 
   registerRoute({

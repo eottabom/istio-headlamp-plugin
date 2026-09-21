@@ -4,7 +4,6 @@ import {
   DATAPLANE_MODE,
   GATEWAY_CLASS_NAME,
   GATEWAY_MANAGED,
-  ISTIO_SYSTEM_NAMESPACE,
   PART_OF,
   PROXY_CONTAINER,
   REVISION,
@@ -230,15 +229,4 @@ export function matchLabels(
   if (!selector || Object.keys(selector).length === 0) return true;
   if (!labels) return false;
   return Object.entries(selector).every(([k, v]) => labels[k] === v);
-}
-
-/**
- * `rootNamespace` from the meshConfig YAML in the `istio` ConfigMap. Mesh-wide
- * policies live there, and it is only `istio-system` by default. A top-level
- * key match is enough: the plugin has no YAML parser, and nested keys of the
- * same name are indented.
- */
-export function meshRootNamespace(meshYaml: string | undefined): string {
-  const match = /^rootNamespace:\s*["']?([a-z0-9-]+)["']?\s*$/m.exec(meshYaml ?? '');
-  return match?.[1] ?? ISTIO_SYSTEM_NAMESPACE;
 }

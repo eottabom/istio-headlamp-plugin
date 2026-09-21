@@ -15,6 +15,7 @@ import {
   wasmPluginHeaderInfo,
   wasmPluginSections,
 } from '../components/detail/MiscDetail';
+import { ProxyConfigsPage } from '../components/detail/ProxyConfigsPage';
 import {
   AttachmentCell,
   authorizationPolicyHeaderInfo,
@@ -69,6 +70,8 @@ export interface IstioResourceDef<T extends IstioObject = any> {
   description: string;
   /** Columns added between namespace and age on the list page. */
   columns?: any[];
+  /** Replaces the generic list page, for resources that need more context. */
+  listComponent?: () => ReactNode;
   headerInfo?: (item: T) => Row[];
   sections?: (item: T) => ReactNode[];
   /** Set for resources where "Applies to" adds nothing. */
@@ -301,6 +304,9 @@ export const ISTIO_RESOURCES: IstioResourceDef[] = [
     description:
       'Per-namespace or per-workload proxy settings such as concurrency and environment variables.',
     columns: [col('concurrency', 'Concurrency', (p: ProxyConfig) => p.spec.concurrency ?? '')],
+    // The mesh default lives in a ConfigMap, not in these resources, so this
+    // page shows both rather than an empty table.
+    listComponent: () => <ProxyConfigsPage />,
   },
   {
     id: 'envoyfilters',

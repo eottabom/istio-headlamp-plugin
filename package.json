@@ -38,7 +38,8 @@
     "typescript": "5.6.2"
   },
   "devDependencies": {
-    "@kinvolk/headlamp-plugin": "^0.14.0"
+    "@kinvolk/headlamp-plugin": "^0.14.0",
+    "@types/js-yaml": "^4.0.9"
   },
   "author": "eottabom <snoopy12oyk@gmail.com>",
   "license": "Apache-2.0",
@@ -46,5 +47,8 @@
     "type": "git",
     "url": "git+https://github.com/eottabom/istio-headlamp-plugin.git"
   },
-  "homepage": "https://github.com/eottabom/istio-headlamp-plugin"
+  "homepage": "https://github.com/eottabom/istio-headlamp-plugin",
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
 }

@@ -64,8 +64,13 @@ export function GenericList({
         id={id}
         columns={['name', 'namespace', ...columns, 'age']}
       >
+        {/*
+          The description renders below the table, so it needs its own top
+          spacing: with an empty table it sat directly under the "no data" box
+          and read as part of it.
+        */}
         {description ? (
-          <Box sx={{ px: 2, pb: 1 }}>
+          <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
             <Typography variant="body2" color="text.secondary">
               {description}
             </Typography>

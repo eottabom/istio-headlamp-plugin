@@ -1,5 +1,5 @@
 {
-  "name": "istio-headlamp-plugin",
+  "name": "@eottabom/istio-headlamp-plugin",
   "version": "0.1.6",
   "description": "Istio service mesh UI for Headlamp, with first-class ambient mode support and spec-first resource details.",
   "scripts": {

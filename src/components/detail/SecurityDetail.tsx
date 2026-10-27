@@ -41,16 +41,7 @@ export function authorizationPolicySections(ap: AuthorizationPolicy): ReactNode[
   ];
 }
 
-/**
- * Warns when an L7 policy is attached to something that ztunnel alone serves.
- *
- * In ambient mode ztunnel enforces L4 only. An AuthorizationPolicy with HTTP
- * methods, paths or JWT claims is silently not enforced unless a waypoint sits
- * in the path — one of the easiest ambient mistakes to make and one of the
- * hardest to notice, because nothing errors and nothing is rejected.
- *
- * @see https://istio.io/latest/docs/ambient/usage/l7-features/
- */
+/** Shows where the policy is enforced, or why its attachment cannot be confirmed. */
 function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
   const coverage = useL7Coverage(policy);
   switch (coverage.state) {
@@ -60,25 +51,50 @@ function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
       );
     case 'sidecar':
       return (
-        <Chip size="small" color="info" label="L7 — enforced by sidecars" variant="outlined" />
+        <Chip
+          size="small"
+          color="info"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — enforced by sidecars`}
+          variant="outlined"
+        />
       );
     case 'covered':
       return (
         <Chip
           size="small"
           color="success"
-          label={`L7 — enforced by ${coverage.through}`}
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — enforced by ${coverage.through}`}
           variant="outlined"
         />
       );
     case 'dangling':
-      return <Chip size="small" color="error" label="L7 — target not found" variant="outlined" />;
+      return (
+        <Chip
+          size="small"
+          color="error"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — target not found`}
+          variant="outlined"
+        />
+      );
     case 'ztunnel-denies':
       return <Chip size="small" color="error" label="L7 — ztunnel will deny" variant="outlined" />;
     case 'unenforced':
-      return <Chip size="small" color="warning" label="L7 — not enforced" variant="outlined" />;
+      return (
+        <Chip
+          size="small"
+          color="warning"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — not enforced`}
+          variant="outlined"
+        />
+      );
     case 'unknown':
-      return <Chip size="small" label="L7 — cannot determine" variant="outlined" />;
+      return (
+        <Chip
+          size="small"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — cannot determine`}
+          variant="outlined"
+        />
+      );
   }
 }
 
@@ -88,6 +104,7 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
   if (coverage.state === 'l4') return null;
 
   if (coverage.state === 'sidecar') {
+    if (coverage.requirements.length === 0) return null;
     return (
       <ConfigWarning severity="info" title="This policy uses L7 attributes">
         <Typography variant="body2">
@@ -100,7 +117,7 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
 
   if (coverage.state === 'covered') {
     return (
-      <ConfigWarning severity="success" title={`L7 policy is enforced at the ${coverage.through}`}>
+      <ConfigWarning severity="success" title={`Policy is enforced at the ${coverage.through}`}>
         <Typography variant="body2">
           {coverage.through === 'waypoint'
             ? 'Traffic to the targeted workloads passes through waypoint '
@@ -115,8 +132,8 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
     return (
       <ConfigWarning severity="error" title={`Target ${coverage.targetKind} not found`}>
         <Typography variant="body2">
-          This policy attaches to <Mono>{coverage.missing.join(', ')}</Mono>, which does not exist
-          in this cluster. Nothing enforces it until that {coverage.targetKind} is created.
+          <Mono>{coverage.missing.join(', ')}</Mono> does not exist in this cluster, so this policy
+          cannot be enforced for those targets. Other targets may still be enforced.
         </Typography>
       </ConfigWarning>
     );
@@ -126,8 +143,10 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
     return (
       <ConfigWarning severity="info" title="Enforcement cannot be determined">
         <Typography variant="body2">
-          This policy uses L7 attributes, but {coverage.reason}. Nothing here says whether they are
-          enforced; the page is not claiming they are.
+          {coverage.requirements.length
+            ? 'This policy uses L7 attributes, but '
+            : 'For this policy, '}
+          {coverage.reason}. This page cannot confirm whether it is enforced.
         </Typography>
       </ConfigWarning>
     );
@@ -152,21 +171,24 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
               only (<Mono>{WAYPOINT_FOR}</Mono> is not <Mono>service</Mono> or <Mono>all</Mono>).
             </>
           )}{' '}
-          The policy is not enforced for those targets, leaving these conditions unchecked:
+          The policy is not enforced for those targets
+          {coverage.requirements.length ? ', leaving these conditions unchecked:' : '.'}
         </Typography>
-        <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-          {coverage.requirements.map(r => (
-            <li key={r}>
-              <Mono>{r}</Mono>
-            </li>
-          ))}
-        </Box>
+        {coverage.requirements.length > 0 && (
+          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+            {coverage.requirements.map(r => (
+              <li key={r}>
+                <Mono>{r}</Mono>
+              </li>
+            ))}
+          </Box>
+        )}
         <Typography variant="body2" sx={{ mt: 1 }}>
-          Traffic matching them is not blocked by this policy; another AuthorizationPolicy may still
-          block it. Enrol those Services with a waypoint that handles Service traffic — pointing{' '}
-          <Mono>targetRefs</Mono> at a waypoint Gateway does not help while the Service itself
-          routes past it. Restricting the policy to L4 attributes (ports, principals, namespaces, IP
-          blocks) would instead let ztunnel enforce it without a waypoint.
+          Traffic to those Services is not blocked by this policy; another AuthorizationPolicy may
+          still block it. Enrol those Services with a waypoint that handles Service traffic —
+          pointing <Mono>targetRefs</Mono> at a waypoint Gateway does not help while the Service
+          itself routes past it. To enforce an L4 policy at ztunnel, target workloads with a
+          selector instead of a <Mono>targetRef</Mono>.
         </Typography>
       </ConfigWarning>
     );
@@ -304,15 +326,20 @@ function RulesTable({ rules }: { rules: AuthorizationRule[] }) {
  */
 export function peerAuthenticationScope(
   pa: { metadata: { namespace?: string }; selectorLabels?: unknown },
-  rootNamespace: string
+  rootNamespace: string | null
 ): string {
-  if (pa.metadata.namespace === rootNamespace && !pa.selectorLabels) {
+  if (pa.selectorLabels) return 'Selected workloads';
+  if (rootNamespace === null) return 'Cannot determine (mesh root namespace unreadable)';
+  if (pa.metadata.namespace === rootNamespace) {
     return 'Mesh-wide (root namespace, no selector)';
   }
-  return pa.selectorLabels ? 'Selected workloads' : `Namespace ${pa.metadata.namespace}`;
+  return `Namespace ${pa.metadata.namespace}`;
 }
 
-export function peerAuthenticationHeaderInfo(pa: PeerAuthentication, rootNamespace: string): Row[] {
+export function peerAuthenticationHeaderInfo(
+  pa: PeerAuthentication,
+  rootNamespace: string | null
+): Row[] {
   return [
     {
       name: 'mTLS mode',

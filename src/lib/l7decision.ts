@@ -22,7 +22,7 @@ import { resolveWaypoint } from './mesh';
 export type L7Coverage =
   /** Not enough was readable to judge: still loading, or RBAC hid something. */
   | { state: 'unknown'; requirements: string[]; reason: string }
-  /** No L7 conditions, so ztunnel alone can enforce it. */
+  /** No L7 conditions and no targetRef, so ztunnel can enforce it. */
   | { state: 'l4'; requirements: [] }
   /** Not an ambient mesh; the sidecars of the selected workloads enforce L7. */
   | { state: 'sidecar'; requirements: string[] }
@@ -95,7 +95,11 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
   } = inputs;
 
   const requirements = policy.l7Requirements;
-  if (requirements.length === 0) return { state: 'l4', requirements: [] };
+  // L4 attributes do not make a targetRef policy a ztunnel policy. It still
+  // needs the Service or Gateway named by the targetRef to bind to a proxy.
+  if (requirements.length === 0 && policy.attachmentKind !== 'targetRef') {
+    return { state: 'l4', requirements: [] };
+  }
 
   // Saying "enforced" or "denied" on half-loaded data is the one answer that
   // is never recoverable by looking again, so refuse to answer instead.
@@ -193,11 +197,18 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     )
   );
 
-  if (targetedServices.length === 0) {
+  const missingServices = serviceTargets.filter(
+    t =>
+      !targetedServices.some(
+        svc => t.name === svc.metadata.name && (t.namespace ?? policyNs) === svc.metadata.namespace
+      )
+  );
+
+  if (missingServices.length > 0) {
     return {
       state: 'dangling',
       requirements,
-      missing: serviceTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
+      missing: missingServices.map(t => `${t.namespace ?? policyNs}/${t.name}`),
       targetKind: 'Service',
     };
   }
@@ -214,9 +225,8 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
   const live = bindings.filter(b => b.name && !b.disabled && backing(b));
 
   // A waypoint labelled waypoint-for=workload (or none) never sees traffic
-  // addressed to a Service, so istiod does not bind the Service to it and the
-  // policy falls through to ztunnel. The label names a real waypoint, which is
-  // what made this read as covered.
+  // addressed to a Service, so istiod does not bind the Service to it. The
+  // label names a real waypoint, which is what made this read as covered.
   const serviceWaypoint = (b: (typeof bindings)[number]) => {
     const handles = backing(b)?.metadata.labels?.[WAYPOINT_FOR] ?? 'service';
     return handles === 'service' || handles === 'all';

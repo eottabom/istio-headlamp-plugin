@@ -42,8 +42,13 @@ const policy = (over: Partial<L7Subject> = {}): L7Subject => ({
 });
 
 describe('resolveL7Coverage', () => {
-  it('reports L4 when there are no L7 conditions at all', () => {
-    expect(resolveL7Coverage(policy({ l7Requirements: [] }), READY).state).toBe('l4');
+  it('reports a selector-based L4 policy as ztunnel-enforceable', () => {
+    expect(
+      resolveL7Coverage(
+        policy({ l7Requirements: [], attachmentKind: 'selector', targetRefs: [] }),
+        READY
+      ).state
+    ).toBe('l4');
   });
 
   it('covers a Service targetRef whose waypoint actually exists', () => {
@@ -134,6 +139,38 @@ describe('resolveL7Coverage', () => {
     expect(result).toMatchObject({ targetKind: 'Service', missing: ['shop/gone'] });
   });
 
+  it('does not report coverage when only one of multiple Service targets exists', () => {
+    const result = resolveL7Coverage(
+      policy({
+        targetRefs: [
+          { kind: 'Service', name: 'reviews' },
+          { kind: 'Service', name: 'missing' },
+        ],
+      }),
+      READY
+    );
+    expect(result).toMatchObject({
+      state: 'dangling',
+      missing: ['shop/missing'],
+      targetKind: 'Service',
+    });
+  });
+
+  it('does not send an L4 Service targetRef without a waypoint to ztunnel', () => {
+    const result = resolveL7Coverage(policy({ l7Requirements: [] }), {
+      ...READY,
+      services: [service('reviews', 'shop')],
+    });
+    expect(result).toMatchObject({ state: 'unenforced', services: ['shop/reviews'] });
+  });
+
+  it('keeps an L4 Service targetRef on its waypoint when one is available', () => {
+    expect(resolveL7Coverage(policy({ l7Requirements: [] }), READY)).toMatchObject({
+      state: 'covered',
+      through: 'waypoint',
+    });
+  });
+
   it('does not match a targetRef from another namespace against the local Service', () => {
     const result = resolveL7Coverage(
       policy({ targetRefs: [{ kind: 'Service', name: 'reviews', namespace: 'other' }] }),
@@ -143,7 +180,7 @@ describe('resolveL7Coverage', () => {
   });
 
   // A waypoint that only handles workload traffic is never bound to the
-  // Service, so the policy lands on ztunnel even though the label is valid.
+  // Service, so the policy binds to nothing even though the label is valid.
   it('does not credit a workload-only waypoint for a Service targetRef', () => {
     const result = resolveL7Coverage(policy(), {
       ...READY,
@@ -273,8 +310,13 @@ describe('an unread ztunnel', () => {
     expect(result.state === 'unknown' && result.reason).toContain('kube-system');
   });
 
-  it('still answers for a policy that needs no L7', () => {
-    expect(resolveL7Coverage(policy({ l7Requirements: [] }), unreadable).state).toBe('l4');
+  it('still answers for a selector-based policy that needs no L7', () => {
+    expect(
+      resolveL7Coverage(
+        policy({ l7Requirements: [], attachmentKind: 'selector', targetRefs: [] }),
+        unreadable
+      ).state
+    ).toBe('l4');
   });
 
   it('reads a listed, absent ztunnel as a sidecar mesh', () => {

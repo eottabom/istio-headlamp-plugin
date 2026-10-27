@@ -32,4 +32,14 @@ describe('peerAuthenticationScope', () => {
   it('names the namespace for a policy outside the root one', () => {
     expect(peerAuthenticationScope(pa('shop'), 'istio-system')).toBe('Namespace shop');
   });
+
+  it('does not guess mesh-wide scope when the root namespace cannot be read', () => {
+    expect(peerAuthenticationScope(pa('istio-system'), null)).toContain('Cannot determine');
+  });
+
+  it('still identifies a selector when the root namespace cannot be read', () => {
+    expect(peerAuthenticationScope(pa('shop', { app: 'reviews' }), null)).toBe(
+      'Selected workloads'
+    );
+  });
 });

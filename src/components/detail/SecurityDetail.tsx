@@ -253,7 +253,24 @@ function RulesTable({ rules }: { rules: AuthorizationRule[] }) {
 
 /* ------------------------------ PeerAuthentication ------------------------------ */
 
-export function peerAuthenticationHeaderInfo(pa: PeerAuthentication): Row[] {
+/**
+ * How far a PeerAuthentication reaches.
+ *
+ * Istio reads a policy with no selector in the mesh root namespace as mesh-wide,
+ * and that namespace is `meshConfig.rootNamespace` rather than `istio-system`
+ * whenever an install sets one - the AKS add-on does.
+ */
+export function peerAuthenticationScope(
+  pa: { metadata: { namespace?: string }; selectorLabels?: unknown },
+  rootNamespace: string
+): string {
+  if (pa.metadata.namespace === rootNamespace && !pa.selectorLabels) {
+    return 'Mesh-wide (root namespace, no selector)';
+  }
+  return pa.selectorLabels ? 'Selected workloads' : `Namespace ${pa.metadata.namespace}`;
+}
+
+export function peerAuthenticationHeaderInfo(pa: PeerAuthentication, rootNamespace: string): Row[] {
   return [
     {
       name: 'mTLS mode',
@@ -269,12 +286,7 @@ export function peerAuthenticationHeaderInfo(pa: PeerAuthentication): Row[] {
     },
     {
       name: 'Scope',
-      value:
-        pa.metadata.namespace === 'istio-system' && !pa.selectorLabels
-          ? 'Mesh-wide (root namespace, no selector)'
-          : pa.selectorLabels
-          ? 'Selected workloads'
-          : `Namespace ${pa.metadata.namespace}`,
+      value: peerAuthenticationScope(pa, rootNamespace),
       hideIfEmpty: false,
     },
   ];

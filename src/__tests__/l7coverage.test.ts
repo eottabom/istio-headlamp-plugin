@@ -219,3 +219,32 @@ describe('resolveL7Coverage', () => {
     expect(resolveL7Coverage(policy(), { ...READY, ambientEnabled: false }).state).toBe('sidecar');
   });
 });
+
+describe('an unread ztunnel', () => {
+  // The mesh may well be ambient with ztunnel denying this policy, so the one
+  // answer that must not come out of here is "enforced by sidecars".
+  const unreadable: L7Inputs = {
+    ...READY,
+    ambientEnabled: false,
+    ambientUnknown: true,
+    ambientUnknownNamespaces: ['kube-system'],
+  };
+
+  it('is not reported as a sidecar mesh', () => {
+    expect(resolveL7Coverage(policy(), unreadable).state).toBe('unknown');
+  });
+
+  it('names the namespace it could not read', () => {
+    const result = resolveL7Coverage(policy(), unreadable);
+    expect(result.state === 'unknown' && result.reason).toContain('kube-system');
+  });
+
+  it('still answers for a policy that needs no L7', () => {
+    expect(resolveL7Coverage(policy({ l7Requirements: [] }), unreadable).state).toBe('l4');
+  });
+
+  it('reads a listed, absent ztunnel as a sidecar mesh', () => {
+    const absent: L7Inputs = { ...READY, ambientEnabled: false, ambientUnknown: false };
+    expect(resolveL7Coverage(policy(), absent).state).toBe('sidecar');
+  });
+});

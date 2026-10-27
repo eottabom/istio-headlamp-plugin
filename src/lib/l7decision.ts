@@ -49,6 +49,14 @@ export interface L7Subject {
  */
 export interface L7Inputs {
   ambientEnabled: boolean;
+  /**
+   * Whether the mesh could not be read rather than read as non-ambient. False
+   * here means sidecars enforce the policy, which is the opposite of not
+   * knowing, so the two cannot share a flag.
+   */
+  ambientUnknown?: boolean;
+  /** Namespaces the DaemonSet listing was refused in, to name in the reason. */
+  ambientUnknownNamespaces?: string[];
   loading: boolean;
   waypoints: Array<{
     metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
@@ -62,7 +70,16 @@ export interface L7Inputs {
 }
 
 export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Coverage {
-  const { ambientEnabled, loading, waypoints, gateways, namespaces, services } = inputs;
+  const {
+    ambientEnabled,
+    ambientUnknown,
+    ambientUnknownNamespaces,
+    loading,
+    waypoints,
+    gateways,
+    namespaces,
+    services,
+  } = inputs;
 
   const requirements = policy.l7Requirements;
   if (requirements.length === 0) return { state: 'l4', requirements: [] };
@@ -71,6 +88,20 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
   // is never recoverable by looking again, so refuse to answer instead.
   if (loading) {
     return { state: 'unknown', requirements, reason: 'still reading the mesh state' };
+  }
+
+  // An unread ztunnel is not a sidecar mesh. Answering "enforced by sidecars"
+  // here would reassure someone whose ambient mesh has ztunnel denying this
+  // policy outright.
+  if (ambientUnknown) {
+    const where = (ambientUnknownNamespaces ?? []).join(', ');
+    return {
+      state: 'unknown',
+      requirements,
+      reason: where
+        ? `cannot list DaemonSets in ${where}, so ambient mode is unconfirmed`
+        : 'ambient mode could not be confirmed',
+    };
   }
 
   if (!ambientEnabled) {

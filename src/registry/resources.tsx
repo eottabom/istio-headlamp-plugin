@@ -72,7 +72,7 @@ export interface IstioResourceDef<T extends IstioObject = any> {
   columns?: any[];
   /** Replaces the generic list page, for resources that need more context. */
   listComponent?: () => ReactNode;
-  headerInfo?: (item: T) => Row[];
+  headerInfo?: (item: T, rootNamespace: string) => Row[];
   sections?: (item: T) => ReactNode[];
   /** Set for resources where "Applies to" adds nothing. */
   hideAppliesTo?: boolean;

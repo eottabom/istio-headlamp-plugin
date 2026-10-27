@@ -2,6 +2,7 @@ import { DetailsGrid, SectionBox } from '@kinvolk/headlamp-plugin/lib/CommonComp
 import { Box } from '@mui/material';
 import { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
+import { useRootNamespace } from '../../lib/detect';
 import { IstioObject } from '../../resources/base';
 import { AppliesTo } from './Badges';
 import { FullSpec } from './FullSpec';
@@ -10,7 +11,7 @@ import { Row } from './SpecSection';
 export interface IstioDetailProps<T extends IstioObject = IstioObject> {
   resourceClass: any;
   /** Rows merged into the header info table. */
-  headerInfo?: (item: T) => Row[];
+  headerInfo?: (item: T, rootNamespace: string) => Row[];
   /** Typed sections rendered above the generic spec view. */
   sections?: (item: T) => ReactNode[];
   /** Hide the "Applies to" section, for resources where it is meaningless. */
@@ -33,6 +34,9 @@ export function GenericDetail<T extends IstioObject>({
   hideAppliesTo,
 }: IstioDetailProps<T>) {
   const { name, namespace } = useParams<{ name: string; namespace: string }>();
+  // Mesh-wide scope is decided against the mesh root namespace, which only a
+  // hook can read, so it is resolved here and handed to the header rows.
+  const rootNamespace = useRootNamespace();
 
   return (
     // Plugin routes render without the padding Headlamp's own pages get, so the
@@ -44,7 +48,7 @@ export function GenericDetail<T extends IstioObject>({
         namespace={namespace}
         withEvents
         extraInfo={(item: T | null) =>
-          item && headerInfo ? headerInfo(item).map(toNameValueRow) : []
+          item && headerInfo ? headerInfo(item, rootNamespace).map(toNameValueRow) : []
         }
         extraSections={(item: T) => {
           if (!item) return [];

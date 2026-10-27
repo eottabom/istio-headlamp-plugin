@@ -22,7 +22,7 @@ import { resolveWaypoint } from './mesh';
 export type L7Coverage =
   /** Not enough was readable to judge: still loading, or RBAC hid something. */
   | { state: 'unknown'; requirements: string[]; reason: string }
-  /** No L7 conditions and no targetRef, so ztunnel can enforce it. */
+  /** No L7 requirements and no targetRef; classifies the policy as L4-only. */
   | { state: 'l4'; requirements: [] }
   /** Not an ambient mesh; the sidecars of the selected workloads enforce L7. */
   | { state: 'sidecar'; requirements: string[] }
@@ -72,11 +72,17 @@ export interface L7Inputs {
   ambientUnknownNamespaces?: string[];
   loading: boolean;
   waypoints: Array<{
-    metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
+    metadata: {
+      name: string;
+      namespace?: string;
+      uid?: string;
+      generation?: number;
+      labels?: Record<string, string>;
+    };
     jsonData?: { status?: GatewayStatus };
   }>;
   gateways: Array<{
-    metadata: { name: string; namespace?: string; uid?: string };
+    metadata: { name: string; namespace?: string; uid?: string; generation?: number };
     jsonData?: { status?: GatewayStatus };
   }>;
   /** Gateway API resources were not readable. */
@@ -92,14 +98,33 @@ export interface L7Inputs {
 
 interface GatewayStatus {
   addresses?: unknown[];
-  conditions?: Array<{ type?: string; status?: string }>;
+  conditions?: Array<{ type?: string; status?: string; observedGeneration?: number }>;
 }
 
-function hasProgrammedAddress(gateway: { jsonData?: { status?: GatewayStatus } }): boolean {
+/**
+ * A Programmed condition only confirms the current Gateway when its
+ * observedGeneration matches metadata.generation. Gateway API recommends this
+ * check to avoid relying on stale status; see:
+ * https://gateway-api.sigs.k8s.io/docs/concepts/troubleshooting/
+ * https://gateway-api.sigs.k8s.io/guides/implementers-guide/
+ *
+ * Be conservative when either generation is unavailable: the condition may
+ * describe an older spec, so the caller must treat programming as unknown.
+ */
+function hasProgrammedAddress(gateway: {
+  metadata?: { generation?: number };
+  jsonData?: { status?: GatewayStatus };
+}): boolean {
   const status = gateway.jsonData?.status;
+  const generation = gateway.metadata?.generation;
+  const programmed = status?.conditions?.find(c => c.type === 'Programmed');
+
   return (
     Boolean(status?.addresses?.length) &&
-    status?.conditions?.some(c => c.type === 'Programmed' && c.status === 'True') === true
+    Number.isSafeInteger(generation) &&
+    Number.isSafeInteger(programmed?.observedGeneration) &&
+    programmed?.observedGeneration === generation &&
+    programmed?.status === 'True'
   );
 }
 

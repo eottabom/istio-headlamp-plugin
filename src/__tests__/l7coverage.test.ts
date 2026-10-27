@@ -13,11 +13,11 @@ const waypoint = (
   uid = `${namespace}/${name}`,
   labels: Record<string, string> = {}
 ) => ({
-  metadata: { name, namespace, uid, labels },
+  metadata: { name, namespace, uid, labels, generation: 1 },
   jsonData: {
     status: {
       addresses: [{ value: `${name}.${namespace}.svc.cluster.local` }],
-      conditions: [{ type: 'Programmed', status: 'True' }],
+      conditions: [{ type: 'Programmed', status: 'True', observedGeneration: 1 }],
     },
   },
 });
@@ -48,7 +48,7 @@ const policy = (over: Partial<L7Subject> = {}): L7Subject => ({
 });
 
 describe('resolveL7Coverage', () => {
-  it('reports a selector-based L4 policy as ztunnel-enforceable', () => {
+  it('classifies a selector-based policy with no L7 requirements as L4', () => {
     expect(
       resolveL7Coverage(
         policy({ l7Requirements: [], attachmentKind: 'selector', targetRefs: [] }),
@@ -73,6 +73,73 @@ describe('resolveL7Coverage', () => {
     expect(resolveL7Coverage(policy(), { ...READY, waypoints: [unaddressed] }).state).toBe(
       'unknown'
     );
+  });
+
+  it('accepts a programmed Gateway condition for the current generation', () => {
+    const result = resolveL7Coverage(
+      policy({ targetRefs: [{ kind: 'Gateway', name: 'shop-ingress' }] }),
+      { ...READY, gateways: [waypoint('shop-ingress', 'shop')], waypoints: [] }
+    );
+    expect(result).toMatchObject({ state: 'covered', through: 'gateway' });
+  });
+
+  it('does not accept a Programmed condition from an older generation', () => {
+    const fresh = waypoint('shop-ingress', 'shop');
+    const stale = {
+      ...fresh,
+      metadata: { ...fresh.metadata, generation: 2 },
+    };
+    expect(
+      resolveL7Coverage(policy({ targetRefs: [{ kind: 'Gateway', name: 'shop-ingress' }] }), {
+        ...READY,
+        gateways: [stale],
+        waypoints: [],
+      }).state
+    ).toBe('unknown');
+  });
+
+  it.each(['False', 'Unknown'] as const)('does not accept Programmed=%s for a Gateway', status => {
+    const ready = waypoint('shop-ingress', 'shop');
+    const unprogrammed = {
+      ...ready,
+      jsonData: {
+        status: {
+          addresses: [{ value: 'shop-ingress.shop.svc.cluster.local' }],
+          conditions: [{ type: 'Programmed', status, observedGeneration: 1 }],
+        },
+      },
+    };
+    expect(
+      resolveL7Coverage(policy({ targetRefs: [{ kind: 'Gateway', name: 'shop-ingress' }] }), {
+        ...READY,
+        gateways: [unprogrammed],
+        waypoints: [],
+      }).state
+    ).toBe('unknown');
+  });
+
+  it.each([
+    ['metadata.generation', { generation: undefined }, { observedGeneration: 1 }],
+    ['observedGeneration', { generation: 1 }, { observedGeneration: undefined }],
+  ] as const)('returns unknown when Gateway %s is unavailable', (_field, metadata, condition) => {
+    const ready = waypoint('shop-ingress', 'shop');
+    const incomplete = {
+      ...ready,
+      metadata: { ...ready.metadata, ...metadata },
+      jsonData: {
+        status: {
+          addresses: [{ value: 'shop-ingress.shop.svc.cluster.local' }],
+          conditions: [{ type: 'Programmed', status: 'True', ...condition }],
+        },
+      },
+    };
+    expect(
+      resolveL7Coverage(policy({ targetRefs: [{ kind: 'Gateway', name: 'shop-ingress' }] }), {
+        ...READY,
+        gateways: [incomplete],
+        waypoints: [],
+      }).state
+    ).toBe('unknown');
   });
 
   /* ------------------------------ not knowing ------------------------------ */
@@ -415,7 +482,7 @@ describe('an unread ztunnel', () => {
     expect(result.state === 'unknown' && result.reason).toContain('kube-system');
   });
 
-  it('still answers for a selector-based policy that needs no L7', () => {
+  it('still classifies selector policies without L7 requirements as L4', () => {
     expect(
       resolveL7Coverage(
         policy({ l7Requirements: [], attachmentKind: 'selector', targetRefs: [] }),

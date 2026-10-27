@@ -46,9 +46,7 @@ function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
   const coverage = useL7Coverage(policy);
   switch (coverage.state) {
     case 'l4':
-      return (
-        <Chip size="small" color="success" label="L4 — ztunnel can enforce" variant="outlined" />
-      );
+      return <Chip size="small" label="L4 — no L7 attributes" variant="outlined" />;
     case 'sidecar':
       return (
         <Chip

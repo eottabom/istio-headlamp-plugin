@@ -49,7 +49,7 @@ export type L7Coverage =
 export interface L7Subject {
   metadata: { namespace?: string };
   l7Requirements: string[];
-  targetRefs: Array<{ kind?: string; name?: string; namespace?: string }>;
+  targetRefs: Array<{ group?: string; kind?: string; name?: string; namespace?: string }>;
   /** `targetRef`, `selector` or `namespace`, as Istio resolves attachment. */
   attachmentKind: 'targetRef' | 'selector' | 'namespace';
 }
@@ -75,6 +75,10 @@ export interface L7Inputs {
     metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
   }>;
   gateways: Array<{ metadata: { name: string; namespace?: string; uid?: string } }>;
+  /** Gateway API resources were not readable. */
+  gatewayUnknown?: boolean;
+  /** Gateway API resources are still loading. */
+  gatewayLoading?: boolean;
   /** null means not readable: still loading, or RBAC refused it. */
   namespaces: Array<{ metadata: { name: string; labels?: Record<string, string> } }> | null;
   services: Array<{
@@ -90,6 +94,8 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     loading,
     waypoints,
     gateways,
+    gatewayUnknown,
+    gatewayLoading,
     namespaces,
     services,
   } = inputs;
@@ -121,7 +127,7 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     };
   }
 
-  if (!ambientEnabled) {
+  if (!ambientEnabled && policy.attachmentKind !== 'targetRef') {
     return { state: 'sidecar', requirements };
   }
 
@@ -146,16 +152,69 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
 
   const targets = policy.targetRefs;
 
+  if (gatewayLoading || gatewayUnknown) {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'the Gateway list needed to verify waypoint attachment is unavailable',
+    };
+  }
+
+  // GatewayClass and ServiceEntry attachments are valid Istio API, but this
+  // decision does not read those resources. Mixed kinds also need separate
+  // attachment checks; neither case can be called covered from one kind alone.
+  const kinds = [...new Set(targets.map(t => t.kind ?? 'Service'))];
+  if (
+    kinds.length !== 1 ||
+    !['Gateway', 'Service'].includes(kinds[0]) ||
+    targets.some(
+      t =>
+        !t.name ||
+        (t.namespace !== undefined && t.namespace !== policyNs) ||
+        (t.kind === 'Gateway'
+          ? t.group !== undefined && t.group !== 'gateway.networking.k8s.io'
+          : t.group !== undefined && !['', 'core'].includes(t.group))
+    )
+  ) {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'the targetRefs include mixed, unsupported, or invalid resource references',
+    };
+  }
+
+  if (!ambientEnabled && kinds[0] === 'Service') {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'a Service targetRef requires a waypoint, but ambient mode was not detected',
+    };
+  }
+
   // A targetRef pointing at a Gateway is enforced by that Gateway's proxy.
   // Both kinds count: a waypoint, and an ingress/egress gateway, which is a
   // full Envoy doing L7 in its own right.
-  const gatewayTargets = targets.filter(t => (t.kind ?? '') === 'Gateway');
-  if (gatewayTargets.length > 0) {
+  if (kinds[0] === 'Gateway') {
+    const gatewayTargets = targets;
     const matched = gateways.filter(g =>
       gatewayTargets.some(
         t => t.name === g.metadata.name && (t.namespace ?? policyNs) === g.metadata.namespace
       )
     );
+    const missingGateways = gatewayTargets.filter(
+      t =>
+        !matched.some(
+          g => t.name === g.metadata.name && (t.namespace ?? policyNs) === g.metadata.namespace
+        )
+    );
+    if (missingGateways.length > 0) {
+      return {
+        state: 'dangling',
+        requirements,
+        missing: missingGateways.map(t => `${t.namespace ?? policyNs}/${t.name}`),
+        targetKind: 'Gateway',
+      };
+    }
     if (matched.length > 0) {
       const allWaypoints = matched.every(g =>
         waypoints.some(w => w.metadata.uid === g.metadata.uid)
@@ -167,12 +226,6 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
         through: allWaypoints ? 'waypoint' : 'gateway',
       };
     }
-    return {
-      state: 'dangling',
-      requirements,
-      missing: gatewayTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
-      targetKind: 'Gateway',
-    };
   }
 
   // From here the targetRef names Services, and answering needs both the

@@ -74,6 +74,24 @@ describe('resolveL7Coverage', () => {
     expect(result.state).toBe('unknown');
   });
 
+  it('does not call a Gateway target missing when the Gateway list was denied', () => {
+    const result = resolveL7Coverage(
+      policy({ targetRefs: [{ kind: 'Gateway', name: 'shop-waypoint' }] }),
+      { ...READY, gateways: [], waypoints: [], gatewayUnknown: true }
+    );
+    expect(result.state).toBe('unknown');
+  });
+
+  it('does not call a Service unenforced while the Gateway list is loading', () => {
+    const result = resolveL7Coverage(policy(), {
+      ...READY,
+      gateways: [],
+      waypoints: [],
+      gatewayLoading: true,
+    });
+    expect(result.state).toBe('unknown');
+  });
+
   /* --------------------------- attachment is king --------------------------- */
 
   // A waypoint only enforces what a targetRef attaches to it. Reading the
@@ -176,7 +194,7 @@ describe('resolveL7Coverage', () => {
       policy({ targetRefs: [{ kind: 'Service', name: 'reviews', namespace: 'other' }] }),
       READY
     );
-    expect(result.state).toBe('dangling');
+    expect(result.state).toBe('unknown');
   });
 
   // A waypoint that only handles workload traffic is never bound to the
@@ -284,10 +302,63 @@ describe('resolveL7Coverage', () => {
     expect(result).toMatchObject({ state: 'dangling', targetKind: 'Gateway' });
   });
 
+  it('does not report all Gateway targets covered when one is missing', () => {
+    const result = resolveL7Coverage(
+      policy({
+        targetRefs: [
+          { kind: 'Gateway', name: 'shop-ingress' },
+          { kind: 'Gateway', name: 'missing-gw' },
+        ],
+      }),
+      { ...READY, gateways: [waypoint('shop-ingress', 'shop', 'gw-uid')], waypoints: [] }
+    );
+    expect(result).toMatchObject({ state: 'dangling', missing: ['shop/missing-gw'] });
+  });
+
+  it('does not infer coverage from only one kind of mixed targetRefs', () => {
+    const result = resolveL7Coverage(
+      policy({
+        targetRefs: [
+          { kind: 'Gateway', name: 'shop-ingress' },
+          { kind: 'Service', name: 'reviews' },
+        ],
+      }),
+      { ...READY, gateways: [waypoint('shop-ingress', 'shop', 'gw-uid')], waypoints: [] }
+    );
+    expect(result.state).toBe('unknown');
+  });
+
+  it('does not credit a cross-namespace Gateway targetRef', () => {
+    const result = resolveL7Coverage(
+      policy({ targetRefs: [{ kind: 'Gateway', name: 'shared', namespace: 'other' }] }),
+      { ...READY, gateways: [waypoint('shared', 'other')], waypoints: [] }
+    );
+    expect(result.state).toBe('unknown');
+  });
+
+  it('does not call a supported but unread ServiceEntry target missing Service', () => {
+    const result = resolveL7Coverage(
+      policy({
+        targetRefs: [{ group: 'networking.istio.io', kind: 'ServiceEntry', name: 'external' }],
+      }),
+      READY
+    );
+    expect(result.state).toBe('unknown');
+  });
+
+  it('does not credit sidecars for a Service targetRef without ambient mode', () => {
+    expect(resolveL7Coverage(policy(), { ...READY, ambientEnabled: false }).state).toBe('unknown');
+  });
+
   /* -------------------------------- sidecar -------------------------------- */
 
   it('leaves L7 to the sidecars when the mesh is not ambient', () => {
-    expect(resolveL7Coverage(policy(), { ...READY, ambientEnabled: false }).state).toBe('sidecar');
+    expect(
+      resolveL7Coverage(policy({ attachmentKind: 'selector', targetRefs: [] }), {
+        ...READY,
+        ambientEnabled: false,
+      }).state
+    ).toBe('sidecar');
   });
 });
 
@@ -321,6 +392,8 @@ describe('an unread ztunnel', () => {
 
   it('reads a listed, absent ztunnel as a sidecar mesh', () => {
     const absent: L7Inputs = { ...READY, ambientEnabled: false, ambientUnknown: false };
-    expect(resolveL7Coverage(policy(), absent).state).toBe('sidecar');
+    expect(
+      resolveL7Coverage(policy({ attachmentKind: 'selector', targetRefs: [] }), absent).state
+    ).toBe('sidecar');
   });
 });

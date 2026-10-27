@@ -82,6 +82,10 @@ export interface MeshStatus {
   cni: any | null;
   /** Gateways whose class is `istio-waypoint`. */
   waypoints: any[];
+  /** Gateway listing could not be read, so waypoint attachment is unconfirmed. */
+  gatewayUnknown: boolean;
+  /** Gateway listing is still pending. */
+  gatewayLoading: boolean;
   /** Whether the control plane is still being checked. */
   controlPlaneLoading: boolean;
   /** A missing control plane could not be confirmed because Deployment access was denied. */
@@ -123,7 +127,8 @@ export function useMeshStatus(): MeshStatus {
   const daemonSetQuery = DaemonSet.useList({ namespace: dataPlane });
   const [daemonSets] = daemonSetQuery;
   const daemonSetErrors = daemonSetQuery.errors;
-  const [gateways] = GatewayClass.useList();
+  const gatewayQuery = GatewayClass.useList();
+  const [gateways, gatewayError] = gatewayQuery;
 
   return useMemo(() => {
     const istiod = (deployments ?? []).filter(isIstiod);
@@ -152,6 +157,8 @@ export function useMeshStatus(): MeshStatus {
       cni,
       gateways: gateways ?? [],
       waypoints,
+      gatewayUnknown: Boolean(gatewayError),
+      gatewayLoading: gatewayQuery.isLoading,
       ambientEnabled: Boolean(ztunnel),
       ztunnelUnknown:
         !daemonSetQuery.isLoading && dataPlaneResourceUnknown(daemonSetErrors, Boolean(ztunnel)),
@@ -171,6 +178,8 @@ export function useMeshStatus(): MeshStatus {
     daemonSets,
     daemonSetErrors,
     gateways,
+    gatewayError,
+    gatewayQuery.isLoading,
   ]);
 }
 

@@ -17,6 +17,8 @@ export function useL7Coverage(policy: L7Subject) {
     dataPlaneForbiddenNamespaces,
     waypoints,
     gateways,
+    gatewayUnknown,
+    gatewayLoading,
     loading,
   } = useMeshStatus();
   const [namespaces, namespacesError] = K8s.ResourceClasses.Namespace.useList();
@@ -31,6 +33,8 @@ export function useL7Coverage(policy: L7Subject) {
     loading,
     waypoints,
     gateways,
+    gatewayUnknown,
+    gatewayLoading,
     namespaces: namespacesError ? null : namespaces,
     services: servicesError ? null : services,
   });

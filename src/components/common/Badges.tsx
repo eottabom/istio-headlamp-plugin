@@ -1,6 +1,6 @@
 import { Icon } from '@iconify/react';
-import { Link } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
-import { Box, Chip, Tooltip, Typography } from '@mui/material';
+import { createRouteURL } from '@kinvolk/headlamp-plugin/lib/lib/router';
+import { Box, Chip, Link as MuiLink, Tooltip, Typography } from '@mui/material';
 import { MeshMode, MeshState } from '../../lib/mesh';
 import { IstioObject } from '../../resources/base';
 import { LabelPairs } from './SpecSection';
@@ -84,7 +84,11 @@ export function TargetRefChip({
 
   if (refObj.kind === 'Service' && refObj.name && ns) {
     return (
-      <Link routeName="service" params={{ name: refObj.name, namespace: ns }}>
+      <MuiLink
+        href={createRouteURL('service', { name: refObj.name, namespace: ns })}
+        underline="none"
+        color="inherit"
+      >
         <Chip
           size="small"
           icon={<Icon icon="mdi:kubernetes" width={16} />}
@@ -92,12 +96,16 @@ export function TargetRefChip({
           variant="outlined"
           clickable
         />
-      </Link>
+      </MuiLink>
     );
   }
   if (refObj.kind === 'Gateway' && refObj.name && ns) {
     return (
-      <Link routeName="gateway" params={{ name: refObj.name, namespace: ns }}>
+      <MuiLink
+        href={createRouteURL('gateway', { name: refObj.name, namespace: ns })}
+        underline="none"
+        color="inherit"
+      >
         <Chip
           size="small"
           icon={<Icon icon="mdi:door-open" width={16} />}
@@ -105,7 +113,7 @@ export function TargetRefChip({
           variant="outlined"
           clickable
         />
-      </Link>
+      </MuiLink>
     );
   }
   return <Chip size="small" label={label} variant="outlined" />;

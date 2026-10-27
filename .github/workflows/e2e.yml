@@ -1,11 +1,17 @@
-name: E2E
+name: 🌐 E2E
 
 # Browser tests against Headlamp on a kind cluster running Istio ambient.
-# Slower than CI (a cluster and a mesh come up first), so it runs after merge
-# and on demand rather than on every pull request push.
+#
+# A cluster and a mesh come up first, which costs a few minutes over CI, but
+# not enough to leave a pull request unverified until after it merges. Draft
+# pull requests are skipped, so work in progress does not stand a cluster up on
+# every push; `ready_for_review` is listed because the default event types do
+# not include it, and without it a draft turned ready would never be tested.
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +23,8 @@ concurrency:
 
 jobs:
   e2e:
+    name: browser tests
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:

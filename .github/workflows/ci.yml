@@ -1,4 +1,4 @@
-name: CI
+name: 🔍 CI
 
 on:
   push:
@@ -9,8 +9,15 @@ on:
 permissions:
   contents: read
 
+# A new push supersedes the run in flight: without this three pushes in a row
+# leave three runs going, and the oldest result lands last.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
+    name: lint, types, tests
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

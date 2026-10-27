@@ -1,4 +1,4 @@
-name: Publish GitHub Package
+name: 📦 Publish image
 run-name: Publish plugin image v${{ inputs.version }}
 
 on:
@@ -24,6 +24,7 @@ concurrency:
 
 jobs:
   publish:
+    name: container image
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

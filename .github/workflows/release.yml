@@ -1,4 +1,4 @@
-name: Release
+name: 🚀 Release
 
 # Without this the Actions list shows a row of identical "Release" runs.
 run-name: Release v${{ inputs.version }}
@@ -26,6 +26,7 @@ permissions:
 # is taken from the tarball this job publishes, never guessed beforehand.
 jobs:
   release:
+    name: tag and publish
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

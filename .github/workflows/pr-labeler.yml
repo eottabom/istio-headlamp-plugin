@@ -1,0 +1,57 @@
+name: 🏷️ PR Labeler
+
+# eottabom-bot recomputes the size and path labels when a PR is opened, updated or retitled.
+# Labels only, no comment. The logic and the path rules live in eottabom/engineering-log
+# (.github/bot/pr-labeler.js, .github/bot/labeler/istio-headlamp-plugin.json).
+#
+# pull_request_target so that PRs from forks get the app secrets too. This is safe here:
+# the PR code is never checked out or run, only the changed-file list is read through the API.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+# A new push cancels the run in flight, so only the latest state is labeled.
+concurrency:
+  group: pr-labels-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    name: "PR #${{ github.event.pull_request.number }} / Update labels"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Issue eottabom-bot token
+        id: bot
+        timeout-minutes: 3
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CI_BOT_APP_ID }}
+          private-key: ${{ secrets.CI_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }},engineering-log
+
+      - name: Checkout bot scripts
+        timeout-minutes: 3
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/engineering-log
+          token: ${{ steps.bot.outputs.token }}
+          path: .bot
+          sparse-checkout: .github/bot
+          persist-credentials: false
+
+      - name: Label pull request
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ steps.bot.outputs.token }}
+          script: |
+            const path = require('path');
+            const root = path.join(process.env.GITHUB_WORKSPACE, '.bot', '.github', 'bot');
+            const config = require(path.join(root, 'labeler', 'istio-headlamp-plugin.json'));
+            const labeler = require(path.join(root, 'pr-labeler.js'));
+            await labeler.run({ github, context, core, config });

@@ -26,7 +26,7 @@ export type L7Coverage =
   | { state: 'l4'; requirements: [] }
   /** Not an ambient mesh; the sidecars of the selected workloads enforce L7. */
   | { state: 'sidecar'; requirements: string[] }
-  /** A waypoint or an ingress/egress gateway terminates L7 for these targets. */
+  /** The targets attach to programmed, addressed waypoint or gateway proxies. */
   | { state: 'covered'; requirements: string[]; via: string[]; through: 'waypoint' | 'gateway' }
   /** A targetRef names something that does not exist, so nothing enforces it. */
   | { state: 'dangling'; requirements: string[]; missing: string[]; targetKind: string }
@@ -73,8 +73,12 @@ export interface L7Inputs {
   loading: boolean;
   waypoints: Array<{
     metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
+    jsonData?: { status?: GatewayStatus };
   }>;
-  gateways: Array<{ metadata: { name: string; namespace?: string; uid?: string } }>;
+  gateways: Array<{
+    metadata: { name: string; namespace?: string; uid?: string };
+    jsonData?: { status?: GatewayStatus };
+  }>;
   /** Gateway API resources were not readable. */
   gatewayUnknown?: boolean;
   /** Gateway API resources are still loading. */
@@ -84,6 +88,19 @@ export interface L7Inputs {
   services: Array<{
     metadata: { name: string; namespace?: string; labels?: Record<string, string> };
   }> | null;
+}
+
+interface GatewayStatus {
+  addresses?: unknown[];
+  conditions?: Array<{ type?: string; status?: string }>;
+}
+
+function hasProgrammedAddress(gateway: { jsonData?: { status?: GatewayStatus } }): boolean {
+  const status = gateway.jsonData?.status;
+  return (
+    Boolean(status?.addresses?.length) &&
+    status?.conditions?.some(c => c.type === 'Programmed' && c.status === 'True') === true
+  );
 }
 
 export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Coverage {
@@ -216,6 +233,13 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
       };
     }
     if (matched.length > 0) {
+      if (matched.some(g => !hasProgrammedAddress(g))) {
+        return {
+          state: 'unknown',
+          requirements,
+          reason: 'a targeted Gateway has no confirmed programmed address',
+        };
+      }
       const allWaypoints = matched.every(g =>
         waypoints.some(w => w.metadata.uid === g.metadata.uid)
       );
@@ -275,6 +299,15 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     waypoints.find(
       w => w.metadata.name === b.name && w.metadata.namespace === (b.namespace ?? policyNs)
     );
+  if (
+    bindings.some(b => b.name && !b.disabled && backing(b) && !hasProgrammedAddress(backing(b)!))
+  ) {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'a targeted Service names a waypoint without a confirmed programmed address',
+    };
+  }
   const live = bindings.filter(b => b.name && !b.disabled && backing(b));
 
   // A waypoint labelled waypoint-for=workload (or none) never sees traffic

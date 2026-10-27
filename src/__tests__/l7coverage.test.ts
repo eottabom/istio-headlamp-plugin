@@ -14,6 +14,12 @@ const waypoint = (
   labels: Record<string, string> = {}
 ) => ({
   metadata: { name, namespace, uid, labels },
+  jsonData: {
+    status: {
+      addresses: [{ value: `${name}.${namespace}.svc.cluster.local` }],
+      conditions: [{ type: 'Programmed', status: 'True' }],
+    },
+  },
 });
 
 const service = (name: string, namespace: string, labels: Record<string, string> = {}) => ({
@@ -55,6 +61,18 @@ describe('resolveL7Coverage', () => {
     const result = resolveL7Coverage(policy(), READY);
     expect(result.state).toBe('covered');
     expect(result).toMatchObject({ through: 'waypoint', via: ['shop-waypoint'] });
+  });
+
+  it('does not claim coverage when a named waypoint has no address', () => {
+    const unaddressed = {
+      ...waypoint('shop-waypoint', 'shop'),
+      jsonData: {
+        status: { addresses: [], conditions: [{ type: 'Programmed', status: 'False' }] },
+      },
+    };
+    expect(resolveL7Coverage(policy(), { ...READY, waypoints: [unaddressed] }).state).toBe(
+      'unknown'
+    );
   });
 
   /* ------------------------------ not knowing ------------------------------ */
@@ -313,6 +331,22 @@ describe('resolveL7Coverage', () => {
       { ...READY, gateways: [waypoint('shop-ingress', 'shop', 'gw-uid')], waypoints: [] }
     );
     expect(result).toMatchObject({ state: 'dangling', missing: ['shop/missing-gw'] });
+  });
+
+  it('does not claim coverage for a Gateway without a programmed address', () => {
+    const unaddressed = {
+      ...waypoint('shop-ingress', 'shop'),
+      jsonData: {
+        status: { addresses: [], conditions: [{ type: 'Programmed', status: 'False' }] },
+      },
+    };
+    expect(
+      resolveL7Coverage(policy({ targetRefs: [{ kind: 'Gateway', name: 'shop-ingress' }] }), {
+        ...READY,
+        gateways: [unaddressed],
+        waypoints: [],
+      }).state
+    ).toBe('unknown');
   });
 
   it('does not infer coverage from only one kind of mixed targetRefs', () => {

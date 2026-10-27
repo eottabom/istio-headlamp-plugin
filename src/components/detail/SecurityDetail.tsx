@@ -63,7 +63,7 @@ function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
         <Chip
           size="small"
           color="success"
-          label={`${coverage.requirements.length ? 'L7' : 'L4'} — enforced by ${coverage.through}`}
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — attached to ${coverage.through}`}
           variant="outlined"
         />
       );
@@ -117,12 +117,13 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
 
   if (coverage.state === 'covered') {
     return (
-      <ConfigWarning severity="success" title={`Policy is enforced at the ${coverage.through}`}>
+      <ConfigWarning severity="success" title={`Policy is attached to the ${coverage.through}`}>
         <Typography variant="body2">
           {coverage.through === 'waypoint'
-            ? 'Traffic to the targeted workloads passes through waypoint '
-            : 'The targeted gateway terminates L7 itself, so no waypoint is needed: '}
-          <Mono>{coverage.via.join(', ')}</Mono>.
+            ? 'The targeted Services are configured to use programmed waypoints: '
+            : 'The targeted Gateways have programmed addresses: '}
+          <Mono>{coverage.via.join(', ')}</Mono>. The policy applies to traffic that actually
+          reaches those proxies; traffic bypassing them is not covered by this check.
         </Typography>
       </ConfigWarning>
     );
@@ -322,14 +323,20 @@ function RulesTable({ rules }: { rules: AuthorizationRule[] }) {
  *
  * Istio reads a policy with no selector in the mesh root namespace as mesh-wide,
  * and that namespace is `meshConfig.rootNamespace` rather than `istio-system`
- * whenever an install sets one - the AKS add-on does.
+ * whenever an install sets one - the AKS add-on does. Empty selectors have the
+ * same scope as omitted selectors; non-empty selectors in the root are ignored.
  */
 export function peerAuthenticationScope(
-  pa: { metadata: { namespace?: string }; selectorLabels?: unknown },
+  pa: { metadata: { namespace?: string }; selectorLabels?: Record<string, string> },
   rootNamespace: string | null
 ): string {
-  if (pa.selectorLabels) return 'Selected workloads';
   if (rootNamespace === null) return 'Cannot determine (mesh root namespace unreadable)';
+  const hasSelector = Boolean(pa.selectorLabels && Object.keys(pa.selectorLabels).length > 0);
+  if (hasSelector) {
+    return pa.metadata.namespace === rootNamespace
+      ? 'Ignored (workload selector in root namespace)'
+      : 'Selected workloads';
+  }
   if (pa.metadata.namespace === rootNamespace) {
     return 'Mesh-wide (root namespace, no selector)';
   }

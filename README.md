@@ -15,8 +15,9 @@ Istio releases newer than this plugin.
 
 **2. Ambient mode is first-class.**
 Waypoints, ztunnel, `istio-cni`, namespace enrolment and the L4/L7 split are surfaced
-directly, including the case where an L7 `AuthorizationPolicy` reaches ztunnel instead of a
-waypoint and fails closed, denying the traffic it was meant to filter.
+directly, including the two ways an L7 `AuthorizationPolicy` misses its mark: reaching ztunnel
+instead of a waypoint, where it fails closed and denies, or binding to nothing at all and
+leaving the traffic it was meant to filter unchecked.
 
 ![Demo](docs/images/demo.gif)
 
@@ -189,18 +190,19 @@ Every page ends with a **Full spec** section, so nothing in the resource is ever
   both are easy to get wrong by hand:
   - only a `targetRef` attaches a policy to a waypoint. A `selector`, or neither, leaves the
     policy with ztunnel however the namespace is labelled.
-  - ztunnel cannot evaluate L7, and does not skip what it cannot evaluate: the policy
-    **fails closed and denies**.
+  - ztunnel cannot evaluate L7, and does not skip what it cannot evaluate: a policy that
+    reaches it **fails closed and denies**.
+  - a `targetRef` naming a Service with no waypoint behind it lands on nothing, and is not
+    passed to ztunnel either, so the policy is simply **not enforced** for that Service.
 
   So the page names the enforcement point rather than guessing. A `use-waypoint` label is
   checked against the Gateways that exist, because a typo in that label otherwise reads as
   full coverage. When the mesh state, Services or Namespaces cannot be read, the page says
   it cannot determine enforcement instead of assuming.
 
-  ![L7 enforcement check](docs/images/l7-enforcement.png)
-
-  Above: a `DENY` policy with HTTP conditions, attached by `targetRef` to a Service that opted
-  out of its waypoint. ztunnel ends up enforcing it, cannot evaluate the conditions, and denies.
+  For example, a `DENY` policy with HTTP conditions, attached by `targetRef` to a Service that opted
+  out of its waypoint. The targetRef has no waypoint to land on, so nothing enforces the policy
+  and its conditions go unchecked.
 - **Mesh column**: Headlamp's own Pod and workload lists gain an `Ambient` / `Sidecar` /
   `Out of mesh` column.
 

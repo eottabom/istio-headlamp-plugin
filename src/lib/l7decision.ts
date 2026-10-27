@@ -31,7 +31,20 @@ export type L7Coverage =
   /** A targetRef names something that does not exist, so nothing enforces it. */
   | { state: 'dangling'; requirements: string[]; missing: string[]; targetKind: string }
   /** ztunnel has to enforce this, and L7 conditions make it deny everything. */
-  | { state: 'ztunnel-denies'; requirements: string[]; reason: string };
+  | { state: 'ztunnel-denies'; requirements: string[]; reason: string }
+  /**
+   * Attached by targetRef to Services that route through no waypoint, so the
+   * policy binds to nothing and no proxy applies it. Unlike the ztunnel case
+   * the traffic is not denied, it is simply unpoliced.
+   */
+  | {
+      state: 'unenforced';
+      requirements: string[];
+      /** Targeted Services whose traffic does not pass through a suitable waypoint. */
+      services: string[];
+      /** Waypoints that only handle workload traffic, when relevant. */
+      incompatibleWaypoints?: string[];
+    };
 
 export interface L7Subject {
   metadata: { namespace?: string };
@@ -233,34 +246,16 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     };
   }
 
-  if (wrongKind.length > 0) {
-    const names = [...new Set(wrongKind.map(b => `${b.namespace ?? policyNs}/${b.name}`))];
-    return {
-      state: 'ztunnel-denies',
-      requirements,
-      reason: `${names.join(
-        ', '
-      )} does not handle Service traffic (${WAYPOINT_FOR} is not service or all), so ztunnel enforces the policy`,
-    };
-  }
-
-  // Some or all targeted Services route through no waypoint, so ztunnel is the
-  // enforcement point for them and the L7 conditions make it deny. When only
-  // some are unenrolled, naming them is the difference between a fix and a
-  // hunt: the others look fine and are.
+  // A targetRef for a Service whose traffic bypasses its waypoint is not handed
+  // to ztunnel. Name every affected Service, including those pointing to a
+  // workload-only waypoint, so mixed targets do not hide an unenforced policy.
   const unenrolled = targetedServices
-    .filter((_, i) => !live.includes(bindings[i]))
+    .filter((_, i) => !live.includes(bindings[i]) || wrongKind.includes(bindings[i]))
     .map(svc => `${svc.metadata.namespace ?? policyNs}/${svc.metadata.name}`);
   return {
-    state: 'ztunnel-denies',
+    state: 'unenforced',
     requirements,
-    reason:
-      unenrolled.length === targetedServices.length
-        ? 'the targeted Services are not enrolled with a waypoint'
-        : `${unenrolled.join(', ')} ${
-            unenrolled.length === 1 ? 'is' : 'are'
-          } not enrolled with a waypoint, so ztunnel denies traffic to ${
-            unenrolled.length === 1 ? 'it' : 'them'
-          }`,
+    services: unenrolled,
+    incompatibleWaypoints: [...new Set(wrongKind.map(b => `${b.namespace ?? policyNs}/${b.name}`))],
   };
 }

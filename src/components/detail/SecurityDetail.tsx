@@ -4,6 +4,7 @@ import { Box, Chip, IconButton, InputAdornment, TextField, Typography } from '@m
 import { ReactNode, useState } from 'react';
 import { ruleMatches } from '../../lib/analyze';
 import { useL7Coverage } from '../../lib/l7coverage';
+import { WAYPOINT_FOR } from '../../lib/labels';
 import {
   AuthorizationPolicy,
   AuthorizationPolicySpec,
@@ -74,6 +75,8 @@ function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
       return <Chip size="small" color="error" label="L7 — target not found" variant="outlined" />;
     case 'ztunnel-denies':
       return <Chip size="small" color="error" label="L7 — ztunnel will deny" variant="outlined" />;
+    case 'unenforced':
+      return <Chip size="small" color="warning" label="L7 — not enforced" variant="outlined" />;
     case 'unknown':
       return <Chip size="small" label="L7 — cannot determine" variant="outlined" />;
   }
@@ -125,6 +128,45 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
         <Typography variant="body2">
           This policy uses L7 attributes, but {coverage.reason}. Nothing here says whether they are
           enforced; the page is not claiming they are.
+        </Typography>
+      </ConfigWarning>
+    );
+  }
+
+  // A targetRef is how a policy reaches a waypoint, so Services with none leave
+  // it bound to nothing: istiod never hands it to ztunnel, and the traffic the
+  // author meant to restrict is simply unpoliced.
+  if (coverage.state === 'unenforced') {
+    return (
+      <ConfigWarning severity="warning" title="This policy is not enforced for these Services">
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          A <Mono>targetRef</Mono> is what puts a policy on a waypoint.{' '}
+          <Mono>{coverage.services.join(', ')}</Mono>{' '}
+          {coverage.services.length === 1 ? 'does' : 'do'} not route through a waypoint that handles
+          Service traffic.
+          {!!coverage.incompatibleWaypoints?.length && (
+            <>
+              {' '}
+              <Mono>{coverage.incompatibleWaypoints.join(', ')}</Mono>{' '}
+              {coverage.incompatibleWaypoints.length === 1 ? 'handles' : 'handle'} workload traffic
+              only (<Mono>{WAYPOINT_FOR}</Mono> is not <Mono>service</Mono> or <Mono>all</Mono>).
+            </>
+          )}{' '}
+          The policy is not enforced for those targets, leaving these conditions unchecked:
+        </Typography>
+        <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+          {coverage.requirements.map(r => (
+            <li key={r}>
+              <Mono>{r}</Mono>
+            </li>
+          ))}
+        </Box>
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          Traffic matching them is not blocked by this policy; another AuthorizationPolicy may still
+          block it. Enrol those Services with a waypoint that handles Service traffic — pointing{' '}
+          <Mono>targetRefs</Mono> at a waypoint Gateway does not help while the Service itself
+          routes past it. Restricting the policy to L4 attributes (ports, principals, namespaces, IP
+          blocks) would instead let ztunnel enforce it without a waypoint.
         </Typography>
       </ConfigWarning>
     );

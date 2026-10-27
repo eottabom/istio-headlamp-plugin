@@ -76,9 +76,9 @@ test('Proxy Configs shows the mesh default and the overrides', async ({ page }) 
   await expect(page.getByRole('link', { name: 'shop-proxy' })).toBeVisible();
 });
 
-test('an L7 policy enforced by ztunnel is flagged as denying', async ({ page }) => {
-  await go(page, '/istio/authorizationpolicies/shop/orders-l7-denied');
-  await expect(page.getByText('ztunnel will deny traffic matched by this policy')).toBeVisible();
+test('an L7 policy whose Service has no waypoint is flagged as unenforced', async ({ page }) => {
+  await go(page, '/istio/authorizationpolicies/shop/orders-l7-unenforced');
+  await expect(page.getByText('This policy is not enforced for these Services')).toBeVisible();
 });
 
 test('the waypoints page lists the shop waypoint', async ({ page }) => {

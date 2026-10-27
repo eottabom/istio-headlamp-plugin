@@ -117,12 +117,15 @@ describe('resolveL7Coverage', () => {
     expect(result).toMatchObject({ missing: ['shop/typo-waypoint'] });
   });
 
-  it('denies when the targeted Service is enrolled with nothing', () => {
+  // A targetRef is how a policy reaches a waypoint, so a Service with none
+  // leaves it bound to nothing. istiod does not pass it to ztunnel either, so
+  // the traffic is unpoliced rather than denied.
+  it('leaves the policy unenforced when the targeted Service has no waypoint', () => {
     const result = resolveL7Coverage(policy(), {
       ...READY,
       services: [service('reviews', 'shop')],
     });
-    expect(result.state).toBe('ztunnel-denies');
+    expect(result).toMatchObject({ state: 'unenforced', services: ['shop/reviews'] });
   });
 
   it('reports a Service targetRef that resolves to nothing as dangling', () => {
@@ -148,8 +151,13 @@ describe('resolveL7Coverage', () => {
         waypoint('shop-waypoint', 'shop', undefined, { 'istio.io/waypoint-for': 'workload' }),
       ],
     });
-    expect(result.state).toBe('ztunnel-denies');
-    expect(result).toMatchObject({ reason: expect.stringContaining('shop/shop-waypoint') });
+    // Service traffic never reaches a workload-only waypoint, so the targetRef
+    // lands on nothing -- and a targetRef policy is not passed to ztunnel.
+    expect(result).toMatchObject({
+      state: 'unenforced',
+      services: ['shop/reviews'],
+      incompatibleWaypoints: ['shop/shop-waypoint'],
+    });
   });
 
   it('credits a waypoint that handles all traffic', () => {
@@ -179,12 +187,10 @@ describe('resolveL7Coverage', () => {
         ],
       }
     );
+    // Only the unenrolled Service is listed: the enrolled one is covered, and
+    // naming it would send the reader hunting through a Service that is fine.
     expect(result.state).not.toBe('covered');
-    expect(result).toMatchObject({
-      state: 'ztunnel-denies',
-      reason: expect.stringContaining('shop/orders is not enrolled'),
-    });
-    expect(result).not.toMatchObject({ reason: expect.stringContaining('shop/reviews') });
+    expect(result).toMatchObject({ state: 'unenforced', services: ['shop/orders'] });
   });
 
   it('does not credit a waypoint the Service explicitly opted out of', () => {
@@ -192,7 +198,35 @@ describe('resolveL7Coverage', () => {
       ...READY,
       services: [service('reviews', 'shop', { 'istio.io/use-waypoint': 'none' })],
     });
-    expect(result.state).toBe('ztunnel-denies');
+    expect(result).toMatchObject({ state: 'unenforced', services: ['shop/reviews'] });
+  });
+
+  it('names every Service that bypasses enforcement for different reasons', () => {
+    const result = resolveL7Coverage(
+      policy({
+        targetRefs: [
+          { kind: 'Service', name: 'reviews' },
+          { kind: 'Service', name: 'orders' },
+          { kind: 'Service', name: 'catalog' },
+        ],
+      }),
+      {
+        ...READY,
+        waypoints: [
+          waypoint('shop-waypoint', 'shop', undefined, { 'istio.io/waypoint-for': 'workload' }),
+        ],
+        services: [
+          service('reviews', 'shop', { 'istio.io/use-waypoint': 'shop-waypoint' }),
+          service('orders', 'shop', { 'istio.io/use-waypoint': 'none' }),
+          service('catalog', 'shop'),
+        ],
+      }
+    );
+    expect(result).toMatchObject({
+      state: 'unenforced',
+      services: ['shop/reviews', 'shop/orders', 'shop/catalog'],
+      incompatibleWaypoints: ['shop/shop-waypoint'],
+    });
   });
 
   /* -------------------------------- gateways -------------------------------- */

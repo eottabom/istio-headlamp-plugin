@@ -7,6 +7,7 @@ import {
   isIstiod,
   useControlPlaneNamespace,
 } from './controlPlane';
+import { isIstioCrdGroup } from './detectParse';
 import { WAYPOINT_GATEWAY_CLASS } from './labels';
 import { useMeshConfig } from './meshConfig';
 
@@ -44,7 +45,7 @@ export function useIstioCrds(): {
     (items ?? []).forEach(crd => {
       const spec = (crd.jsonData as any)?.spec;
       const group: string = spec?.group ?? '';
-      if (!group.endsWith('istio.io')) return;
+      if (!isIstioCrdGroup(group)) return;
       const plural: string = spec?.names?.plural ?? '';
       map.set(`${plural}.${group}`, {
         key: `${plural}.${group}`,

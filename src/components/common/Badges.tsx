@@ -1,6 +1,7 @@
 import { Icon } from '@iconify/react';
-import { createRouteURL } from '@kinvolk/headlamp-plugin/lib/lib/router';
+import { Router } from '@kinvolk/headlamp-plugin/lib';
 import { Box, Chip, Link as MuiLink, Tooltip, Typography } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import { MeshMode, MeshState } from '../../lib/mesh';
 import { IstioObject } from '../../resources/base';
 import { LabelPairs } from './SpecSection';
@@ -85,7 +86,8 @@ export function TargetRefChip({
   if (refObj.kind === 'Service' && refObj.name && ns) {
     return (
       <MuiLink
-        href={createRouteURL('service', { name: refObj.name, namespace: ns })}
+        component={RouterLink}
+        to={Router.createRouteURL('service', { name: refObj.name, namespace: ns })}
         underline="none"
         color="inherit"
       >
@@ -102,7 +104,8 @@ export function TargetRefChip({
   if (refObj.kind === 'Gateway' && refObj.name && ns) {
     return (
       <MuiLink
-        href={createRouteURL('gateway', { name: refObj.name, namespace: ns })}
+        component={RouterLink}
+        to={Router.createRouteURL('gateway', { name: refObj.name, namespace: ns })}
         underline="none"
         color="inherit"
       >

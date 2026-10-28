@@ -81,6 +81,16 @@ test('an L7 policy whose Service has no waypoint is flagged as unenforced', asyn
   await expect(page.getByText('This policy is not enforced for these Services')).toBeVisible();
 });
 
+// The chip once imported a router path that Headlamp does not expose to
+// plugins, and the whole "Applies to" cell failed to render.
+test('a targetRef chip opens the Service within Headlamp', async ({ page }) => {
+  await go(page, '/istio/authorizationpolicies/shop/reviews-read-only');
+  await page.evaluate(() => ((window as { spaMarker?: boolean }).spaMarker = true));
+  await page.getByRole('link', { name: 'Service/reviews' }).click();
+  await expect(page).toHaveURL(new RegExp(`/c/${CLUSTER}/services/shop/reviews$`));
+  expect(await page.evaluate(() => (window as { spaMarker?: boolean }).spaMarker)).toBe(true);
+});
+
 test('the waypoints page lists the shop waypoint', async ({ page }) => {
   await go(page, '/istio/waypoints');
   await expect(page.getByRole('link', { name: 'shop-waypoint' }).first()).toBeVisible();

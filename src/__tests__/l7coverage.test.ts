@@ -177,6 +177,17 @@ describe('resolveL7Coverage', () => {
     expect(result.state).toBe('unknown');
   });
 
+  it('names an invalid targetRef even when the Gateway list was denied', () => {
+    const result = resolveL7Coverage(
+      policy({ targetRefs: [{ kind: 'Service', name: 'reviews', namespace: 'other' }] }),
+      { ...READY, gateways: [], waypoints: [], gatewayUnknown: true }
+    );
+    expect(result).toMatchObject({
+      state: 'unknown',
+      reason: expect.stringContaining('invalid resource references'),
+    });
+  });
+
   /* --------------------------- attachment is king --------------------------- */
 
   // A waypoint only enforces what a targetRef attaches to it. Reading the

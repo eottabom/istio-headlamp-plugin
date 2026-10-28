@@ -194,14 +194,6 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
 
   const targets = policy.targetRefs;
 
-  if (gatewayLoading || gatewayUnknown) {
-    return {
-      state: 'unknown',
-      requirements,
-      reason: 'the Gateway list needed to verify waypoint attachment is unavailable',
-    };
-  }
-
   // GatewayClass and ServiceEntry attachments are valid Istio API, but this
   // decision does not read those resources. Mixed kinds also need separate
   // attachment checks; neither case can be called covered from one kind alone.
@@ -222,6 +214,16 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
       state: 'unknown',
       requirements,
       reason: 'the targetRefs include mixed, unsupported, or invalid resource references',
+    };
+  }
+
+  // Checked after the references themselves, so an invalid targetRef is
+  // reported as such even on a cluster where Gateways cannot be listed.
+  if (gatewayLoading || gatewayUnknown) {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'the Gateway list needed to verify waypoint attachment is unavailable',
     };
   }
 

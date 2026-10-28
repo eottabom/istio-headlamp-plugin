@@ -299,6 +299,12 @@ entries, list columns and the detail page are all derived from it.
 
 ## Releasing
 
+Only `eottabom` can execute the official release and image publication jobs, from
+`main` in this repository. Fork owners can run their own copies of the workflows,
+but their tokens cannot publish to this repository or its GHCR package. Keep
+repository write access limited to trusted maintainers: someone who can edit
+workflows on `main` can also change these checks.
+
 Run the **Release** workflow with the version without `v`. It verifies the plugin,
 publishes the release tarball, updates Artifact Hub metadata, and then calls
 **Publish GitHub Package** to publish the same artifact to GHCR for `linux/amd64`

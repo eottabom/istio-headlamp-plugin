@@ -25,6 +25,13 @@ concurrency:
 jobs:
   publish:
     name: container image
+    # This workflow is also callable on its own for a failed image push.
+    # Apply the same gate here as in release.yml.
+    if: >-
+      github.repository == 'eottabom/istio-headlamp-plugin' &&
+      github.actor == 'eottabom' &&
+      github.triggering_actor == 'eottabom' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

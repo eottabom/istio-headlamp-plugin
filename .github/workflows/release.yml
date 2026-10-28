@@ -27,6 +27,14 @@ permissions:
 jobs:
   release:
     name: tag and publish
+    # A fork may run its own copy of this workflow, but it must never be
+    # mistaken for the official release pipeline. Check both actors so a
+    # collaborator cannot re-run an owner's earlier release.
+    if: >-
+      github.repository == 'eottabom/istio-headlamp-plugin' &&
+      github.actor == 'eottabom' &&
+      github.triggering_actor == 'eottabom' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5

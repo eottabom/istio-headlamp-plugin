@@ -11,7 +11,16 @@ export { resolveL7Coverage } from './l7decision';
  * Headlamp imports, so it can be tested against the failure cases.
  */
 export function useL7Coverage(policy: L7Subject) {
-  const { ambientEnabled, waypoints, gateways, loading } = useMeshStatus();
+  const {
+    ambientEnabled,
+    ztunnelUnknown,
+    dataPlaneForbiddenNamespaces,
+    waypoints,
+    gateways,
+    gatewayUnknown,
+    gatewayLoading,
+    loading,
+  } = useMeshStatus();
   const [namespaces, namespacesError] = K8s.ResourceClasses.Namespace.useList();
   const [services, servicesError] = K8s.ResourceClasses.Service.useList({
     namespace: policy.metadata.namespace,
@@ -19,9 +28,13 @@ export function useL7Coverage(policy: L7Subject) {
 
   return resolveL7Coverage(policy, {
     ambientEnabled,
+    ambientUnknown: ztunnelUnknown,
+    ambientUnknownNamespaces: dataPlaneForbiddenNamespaces,
     loading,
     waypoints,
     gateways,
+    gatewayUnknown,
+    gatewayLoading,
     namespaces: namespacesError ? null : namespaces,
     services: servicesError ? null : services,
   });

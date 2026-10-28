@@ -32,7 +32,7 @@ export const ruleWithConditions: AuthorizationRule = {
   ],
 };
 
-/** Port-only: the L4 case ztunnel can enforce without a waypoint. */
+/** Port-only: L4 attributes; ambient ztunnel enforcement does not need a waypoint. */
 export const l4Rule: AuthorizationRule = {
   from: [{ source: { namespaces: ['monitoring'] } }],
   to: [{ operation: { ports: ['15020'] } }],

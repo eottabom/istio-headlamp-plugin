@@ -22,21 +22,34 @@ import { resolveWaypoint } from './mesh';
 export type L7Coverage =
   /** Not enough was readable to judge: still loading, or RBAC hid something. */
   | { state: 'unknown'; requirements: string[]; reason: string }
-  /** No L7 conditions, so ztunnel alone can enforce it. */
+  /** No L7 requirements and no targetRef; classifies the policy as L4-only. */
   | { state: 'l4'; requirements: [] }
   /** Not an ambient mesh; the sidecars of the selected workloads enforce L7. */
   | { state: 'sidecar'; requirements: string[] }
-  /** A waypoint or an ingress/egress gateway terminates L7 for these targets. */
+  /** The targets attach to programmed, addressed waypoint or gateway proxies. */
   | { state: 'covered'; requirements: string[]; via: string[]; through: 'waypoint' | 'gateway' }
   /** A targetRef names something that does not exist, so nothing enforces it. */
   | { state: 'dangling'; requirements: string[]; missing: string[]; targetKind: string }
   /** ztunnel has to enforce this, and L7 conditions make it deny everything. */
-  | { state: 'ztunnel-denies'; requirements: string[]; reason: string };
+  | { state: 'ztunnel-denies'; requirements: string[]; reason: string }
+  /**
+   * Attached by targetRef to Services that route through no waypoint, so the
+   * policy binds to nothing and no proxy applies it. Unlike the ztunnel case
+   * the traffic is not denied, it is simply unpoliced.
+   */
+  | {
+      state: 'unenforced';
+      requirements: string[];
+      /** Targeted Services whose traffic does not pass through a suitable waypoint. */
+      services: string[];
+      /** Waypoints that only handle workload traffic, when relevant. */
+      incompatibleWaypoints?: string[];
+    };
 
 export interface L7Subject {
   metadata: { namespace?: string };
   l7Requirements: string[];
-  targetRefs: Array<{ kind?: string; name?: string; namespace?: string }>;
+  targetRefs: Array<{ group?: string; kind?: string; name?: string; namespace?: string }>;
   /** `targetRef`, `selector` or `namespace`, as Istio resolves attachment. */
   attachmentKind: 'targetRef' | 'selector' | 'namespace';
 }
@@ -49,11 +62,33 @@ export interface L7Subject {
  */
 export interface L7Inputs {
   ambientEnabled: boolean;
+  /**
+   * Whether the mesh could not be read rather than read as non-ambient. False
+   * here means sidecars enforce the policy, which is the opposite of not
+   * knowing, so the two cannot share a flag.
+   */
+  ambientUnknown?: boolean;
+  /** Namespaces the DaemonSet listing was refused in, to name in the reason. */
+  ambientUnknownNamespaces?: string[];
   loading: boolean;
   waypoints: Array<{
-    metadata: { name: string; namespace?: string; uid?: string; labels?: Record<string, string> };
+    metadata: {
+      name: string;
+      namespace?: string;
+      uid?: string;
+      generation?: number;
+      labels?: Record<string, string>;
+    };
+    jsonData?: { status?: GatewayStatus };
   }>;
-  gateways: Array<{ metadata: { name: string; namespace?: string; uid?: string } }>;
+  gateways: Array<{
+    metadata: { name: string; namespace?: string; uid?: string; generation?: number };
+    jsonData?: { status?: GatewayStatus };
+  }>;
+  /** Gateway API resources were not readable. */
+  gatewayUnknown?: boolean;
+  /** Gateway API resources are still loading. */
+  gatewayLoading?: boolean;
   /** null means not readable: still loading, or RBAC refused it. */
   namespaces: Array<{ metadata: { name: string; labels?: Record<string, string> } }> | null;
   services: Array<{
@@ -61,11 +96,58 @@ export interface L7Inputs {
   }> | null;
 }
 
+interface GatewayStatus {
+  addresses?: unknown[];
+  conditions?: Array<{ type?: string; status?: string; observedGeneration?: number }>;
+}
+
+/**
+ * A Programmed condition only confirms the current Gateway when its
+ * observedGeneration matches metadata.generation. Gateway API recommends this
+ * check to avoid relying on stale status; see:
+ * https://gateway-api.sigs.k8s.io/docs/concepts/troubleshooting/
+ * https://gateway-api.sigs.k8s.io/guides/implementers-guide/
+ *
+ * Be conservative when either generation is unavailable: the condition may
+ * describe an older spec, so the caller must treat programming as unknown.
+ */
+function hasProgrammedAddress(gateway: {
+  metadata?: { generation?: number };
+  jsonData?: { status?: GatewayStatus };
+}): boolean {
+  const status = gateway.jsonData?.status;
+  const generation = gateway.metadata?.generation;
+  const programmed = status?.conditions?.find(c => c.type === 'Programmed');
+
+  return (
+    Boolean(status?.addresses?.length) &&
+    Number.isSafeInteger(generation) &&
+    Number.isSafeInteger(programmed?.observedGeneration) &&
+    programmed?.observedGeneration === generation &&
+    programmed?.status === 'True'
+  );
+}
+
 export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Coverage {
-  const { ambientEnabled, loading, waypoints, gateways, namespaces, services } = inputs;
+  const {
+    ambientEnabled,
+    ambientUnknown,
+    ambientUnknownNamespaces,
+    loading,
+    waypoints,
+    gateways,
+    gatewayUnknown,
+    gatewayLoading,
+    namespaces,
+    services,
+  } = inputs;
 
   const requirements = policy.l7Requirements;
-  if (requirements.length === 0) return { state: 'l4', requirements: [] };
+  // L4 attributes do not make a targetRef policy a ztunnel policy. It still
+  // needs the Service or Gateway named by the targetRef to bind to a proxy.
+  if (requirements.length === 0 && policy.attachmentKind !== 'targetRef') {
+    return { state: 'l4', requirements: [] };
+  }
 
   // Saying "enforced" or "denied" on half-loaded data is the one answer that
   // is never recoverable by looking again, so refuse to answer instead.
@@ -73,7 +155,21 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     return { state: 'unknown', requirements, reason: 'still reading the mesh state' };
   }
 
-  if (!ambientEnabled) {
+  // An unread ztunnel is not a sidecar mesh. Answering "enforced by sidecars"
+  // here would reassure someone whose ambient mesh has ztunnel denying this
+  // policy outright.
+  if (ambientUnknown) {
+    const where = (ambientUnknownNamespaces ?? []).join(', ');
+    return {
+      state: 'unknown',
+      requirements,
+      reason: where
+        ? `cannot list DaemonSets in ${where}, so ambient mode is unconfirmed`
+        : 'ambient mode could not be confirmed',
+    };
+  }
+
+  if (!ambientEnabled && policy.attachmentKind !== 'targetRef') {
     return { state: 'sidecar', requirements };
   }
 
@@ -98,17 +194,79 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
 
   const targets = policy.targetRefs;
 
+  // GatewayClass and ServiceEntry attachments are valid Istio API, but this
+  // decision does not read those resources. Mixed kinds also need separate
+  // attachment checks; neither case can be called covered from one kind alone.
+  const kinds = [...new Set(targets.map(t => t.kind ?? 'Service'))];
+  if (
+    kinds.length !== 1 ||
+    !['Gateway', 'Service'].includes(kinds[0]) ||
+    targets.some(
+      t =>
+        !t.name ||
+        (t.namespace !== undefined && t.namespace !== policyNs) ||
+        (t.kind === 'Gateway'
+          ? t.group !== undefined && t.group !== 'gateway.networking.k8s.io'
+          : t.group !== undefined && !['', 'core'].includes(t.group))
+    )
+  ) {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'the targetRefs include mixed, unsupported, or invalid resource references',
+    };
+  }
+
+  // Checked after the references themselves, so an invalid targetRef is
+  // reported as such even on a cluster where Gateways cannot be listed.
+  if (gatewayLoading || gatewayUnknown) {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'the Gateway list needed to verify waypoint attachment is unavailable',
+    };
+  }
+
+  if (!ambientEnabled && kinds[0] === 'Service') {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'a Service targetRef requires a waypoint, but ambient mode was not detected',
+    };
+  }
+
   // A targetRef pointing at a Gateway is enforced by that Gateway's proxy.
   // Both kinds count: a waypoint, and an ingress/egress gateway, which is a
   // full Envoy doing L7 in its own right.
-  const gatewayTargets = targets.filter(t => (t.kind ?? '') === 'Gateway');
-  if (gatewayTargets.length > 0) {
+  if (kinds[0] === 'Gateway') {
+    const gatewayTargets = targets;
     const matched = gateways.filter(g =>
       gatewayTargets.some(
         t => t.name === g.metadata.name && (t.namespace ?? policyNs) === g.metadata.namespace
       )
     );
+    const missingGateways = gatewayTargets.filter(
+      t =>
+        !matched.some(
+          g => t.name === g.metadata.name && (t.namespace ?? policyNs) === g.metadata.namespace
+        )
+    );
+    if (missingGateways.length > 0) {
+      return {
+        state: 'dangling',
+        requirements,
+        missing: missingGateways.map(t => `${t.namespace ?? policyNs}/${t.name}`),
+        targetKind: 'Gateway',
+      };
+    }
     if (matched.length > 0) {
+      if (matched.some(g => !hasProgrammedAddress(g))) {
+        return {
+          state: 'unknown',
+          requirements,
+          reason: 'a targeted Gateway has no confirmed programmed address',
+        };
+      }
       const allWaypoints = matched.every(g =>
         waypoints.some(w => w.metadata.uid === g.metadata.uid)
       );
@@ -119,12 +277,6 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
         through: allWaypoints ? 'waypoint' : 'gateway',
       };
     }
-    return {
-      state: 'dangling',
-      requirements,
-      missing: gatewayTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
-      targetKind: 'Gateway',
-    };
   }
 
   // From here the targetRef names Services, and answering needs both the
@@ -149,11 +301,18 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     )
   );
 
-  if (targetedServices.length === 0) {
+  const missingServices = serviceTargets.filter(
+    t =>
+      !targetedServices.some(
+        svc => t.name === svc.metadata.name && (t.namespace ?? policyNs) === svc.metadata.namespace
+      )
+  );
+
+  if (missingServices.length > 0) {
     return {
       state: 'dangling',
       requirements,
-      missing: serviceTargets.map(t => `${t.namespace ?? policyNs}/${t.name}`),
+      missing: missingServices.map(t => `${t.namespace ?? policyNs}/${t.name}`),
       targetKind: 'Service',
     };
   }
@@ -167,12 +326,20 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     waypoints.find(
       w => w.metadata.name === b.name && w.metadata.namespace === (b.namespace ?? policyNs)
     );
+  if (
+    bindings.some(b => b.name && !b.disabled && backing(b) && !hasProgrammedAddress(backing(b)!))
+  ) {
+    return {
+      state: 'unknown',
+      requirements,
+      reason: 'a targeted Service names a waypoint without a confirmed programmed address',
+    };
+  }
   const live = bindings.filter(b => b.name && !b.disabled && backing(b));
 
   // A waypoint labelled waypoint-for=workload (or none) never sees traffic
-  // addressed to a Service, so istiod does not bind the Service to it and the
-  // policy falls through to ztunnel. The label names a real waypoint, which is
-  // what made this read as covered.
+  // addressed to a Service, so istiod does not bind the Service to it. The
+  // label names a real waypoint, which is what made this read as covered.
   const serviceWaypoint = (b: (typeof bindings)[number]) => {
     const handles = backing(b)?.metadata.labels?.[WAYPOINT_FOR] ?? 'service';
     return handles === 'service' || handles === 'all';
@@ -202,34 +369,16 @@ export function resolveL7Coverage(policy: L7Subject, inputs: L7Inputs): L7Covera
     };
   }
 
-  if (wrongKind.length > 0) {
-    const names = [...new Set(wrongKind.map(b => `${b.namespace ?? policyNs}/${b.name}`))];
-    return {
-      state: 'ztunnel-denies',
-      requirements,
-      reason: `${names.join(
-        ', '
-      )} does not handle Service traffic (${WAYPOINT_FOR} is not service or all), so ztunnel enforces the policy`,
-    };
-  }
-
-  // Some or all targeted Services route through no waypoint, so ztunnel is the
-  // enforcement point for them and the L7 conditions make it deny. When only
-  // some are unenrolled, naming them is the difference between a fix and a
-  // hunt: the others look fine and are.
+  // A targetRef for a Service whose traffic bypasses its waypoint is not handed
+  // to ztunnel. Name every affected Service, including those pointing to a
+  // workload-only waypoint, so mixed targets do not hide an unenforced policy.
   const unenrolled = targetedServices
-    .filter((_, i) => !live.includes(bindings[i]))
+    .filter((_, i) => !live.includes(bindings[i]) || wrongKind.includes(bindings[i]))
     .map(svc => `${svc.metadata.namespace ?? policyNs}/${svc.metadata.name}`);
   return {
-    state: 'ztunnel-denies',
+    state: 'unenforced',
     requirements,
-    reason:
-      unenrolled.length === targetedServices.length
-        ? 'the targeted Services are not enrolled with a waypoint'
-        : `${unenrolled.join(', ')} ${
-            unenrolled.length === 1 ? 'is' : 'are'
-          } not enrolled with a waypoint, so ztunnel denies traffic to ${
-            unenrolled.length === 1 ? 'it' : 'them'
-          }`,
+    services: unenrolled,
+    incompatibleWaypoints: [...new Set(wrongKind.map(b => `${b.namespace ?? policyNs}/${b.name}`))],
   };
 }

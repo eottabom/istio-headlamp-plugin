@@ -3076,6 +3076,7 @@ export const waypoints = [
     metadata: {
       name: 'orphan-waypoint',
       namespace: 'legacy',
+      generation: 1,
     },
     spec: {
       gatewayClassName: 'istio-waypoint',
@@ -3174,6 +3175,7 @@ export const waypoints = [
       },
       name: 'shop-waypoint',
       namespace: 'shop',
+      generation: 1,
     },
     spec: {
       gatewayClassName: 'istio-waypoint',

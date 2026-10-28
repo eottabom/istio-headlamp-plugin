@@ -4,6 +4,7 @@ import { Box, Chip, IconButton, InputAdornment, TextField, Typography } from '@m
 import { ReactNode, useState } from 'react';
 import { ruleMatches } from '../../lib/analyze';
 import { useL7Coverage } from '../../lib/l7coverage';
+import { WAYPOINT_FOR } from '../../lib/labels';
 import {
   AuthorizationPolicy,
   AuthorizationPolicySpec,
@@ -40,42 +41,58 @@ export function authorizationPolicySections(ap: AuthorizationPolicy): ReactNode[
   ];
 }
 
-/**
- * Warns when an L7 policy is attached to something that ztunnel alone serves.
- *
- * In ambient mode ztunnel enforces L4 only. An AuthorizationPolicy with HTTP
- * methods, paths or JWT claims is silently not enforced unless a waypoint sits
- * in the path — one of the easiest ambient mistakes to make and one of the
- * hardest to notice, because nothing errors and nothing is rejected.
- *
- * @see https://istio.io/latest/docs/ambient/usage/l7-features/
- */
+/** Shows where the policy is enforced, or why its attachment cannot be confirmed. */
 function EnforcementChip({ policy }: { policy: AuthorizationPolicy }) {
   const coverage = useL7Coverage(policy);
   switch (coverage.state) {
     case 'l4':
-      return (
-        <Chip size="small" color="success" label="L4 — ztunnel can enforce" variant="outlined" />
-      );
+      return <Chip size="small" label="L4 — no L7 attributes" variant="outlined" />;
     case 'sidecar':
       return (
-        <Chip size="small" color="info" label="L7 — enforced by sidecars" variant="outlined" />
+        <Chip
+          size="small"
+          color="info"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — enforced by sidecars`}
+          variant="outlined"
+        />
       );
     case 'covered':
       return (
         <Chip
           size="small"
           color="success"
-          label={`L7 — enforced by ${coverage.through}`}
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — attached to ${coverage.through}`}
           variant="outlined"
         />
       );
     case 'dangling':
-      return <Chip size="small" color="error" label="L7 — target not found" variant="outlined" />;
+      return (
+        <Chip
+          size="small"
+          color="error"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — target not found`}
+          variant="outlined"
+        />
+      );
     case 'ztunnel-denies':
       return <Chip size="small" color="error" label="L7 — ztunnel will deny" variant="outlined" />;
+    case 'unenforced':
+      return (
+        <Chip
+          size="small"
+          color="warning"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — not enforced`}
+          variant="outlined"
+        />
+      );
     case 'unknown':
-      return <Chip size="small" label="L7 — cannot determine" variant="outlined" />;
+      return (
+        <Chip
+          size="small"
+          label={`${coverage.requirements.length ? 'L7' : 'L4'} — cannot determine`}
+          variant="outlined"
+        />
+      );
   }
 }
 
@@ -85,6 +102,7 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
   if (coverage.state === 'l4') return null;
 
   if (coverage.state === 'sidecar') {
+    if (coverage.requirements.length === 0) return null;
     return (
       <ConfigWarning severity="info" title="This policy uses L7 attributes">
         <Typography variant="body2">
@@ -97,12 +115,13 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
 
   if (coverage.state === 'covered') {
     return (
-      <ConfigWarning severity="success" title={`L7 policy is enforced at the ${coverage.through}`}>
+      <ConfigWarning severity="success" title={`Policy is attached to the ${coverage.through}`}>
         <Typography variant="body2">
           {coverage.through === 'waypoint'
-            ? 'Traffic to the targeted workloads passes through waypoint '
-            : 'The targeted gateway terminates L7 itself, so no waypoint is needed: '}
-          <Mono>{coverage.via.join(', ')}</Mono>.
+            ? 'The targeted Services are configured to use programmed waypoints: '
+            : 'The targeted Gateways have programmed addresses: '}
+          <Mono>{coverage.via.join(', ')}</Mono>. The policy applies to traffic that actually
+          reaches those proxies; traffic bypassing them is not covered by this check.
         </Typography>
       </ConfigWarning>
     );
@@ -112,8 +131,8 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
     return (
       <ConfigWarning severity="error" title={`Target ${coverage.targetKind} not found`}>
         <Typography variant="body2">
-          This policy attaches to <Mono>{coverage.missing.join(', ')}</Mono>, which does not exist
-          in this cluster. Nothing enforces it until that {coverage.targetKind} is created.
+          <Mono>{coverage.missing.join(', ')}</Mono> does not exist in this cluster, so this policy
+          cannot be enforced for those targets. Other targets may still be enforced.
         </Typography>
       </ConfigWarning>
     );
@@ -123,8 +142,52 @@ function L7Check({ policy }: { policy: AuthorizationPolicy }) {
     return (
       <ConfigWarning severity="info" title="Enforcement cannot be determined">
         <Typography variant="body2">
-          This policy uses L7 attributes, but {coverage.reason}. Nothing here says whether they are
-          enforced; the page is not claiming they are.
+          {coverage.requirements.length
+            ? 'This policy uses L7 attributes, but '
+            : 'For this policy, '}
+          {coverage.reason}. This page cannot confirm whether it is enforced.
+        </Typography>
+      </ConfigWarning>
+    );
+  }
+
+  // A targetRef is how a policy reaches a waypoint, so Services with none leave
+  // it bound to nothing: istiod never hands it to ztunnel, and the traffic the
+  // author meant to restrict is simply unpoliced.
+  if (coverage.state === 'unenforced') {
+    return (
+      <ConfigWarning severity="warning" title="This policy is not enforced for these Services">
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          A <Mono>targetRef</Mono> is what puts a policy on a waypoint.{' '}
+          <Mono>{coverage.services.join(', ')}</Mono>{' '}
+          {coverage.services.length === 1 ? 'does' : 'do'} not route through a waypoint that handles
+          Service traffic.
+          {!!coverage.incompatibleWaypoints?.length && (
+            <>
+              {' '}
+              <Mono>{coverage.incompatibleWaypoints.join(', ')}</Mono>{' '}
+              {coverage.incompatibleWaypoints.length === 1 ? 'handles' : 'handle'} workload traffic
+              only (<Mono>{WAYPOINT_FOR}</Mono> is not <Mono>service</Mono> or <Mono>all</Mono>).
+            </>
+          )}{' '}
+          The policy is not enforced for those targets
+          {coverage.requirements.length ? ', leaving these conditions unchecked:' : '.'}
+        </Typography>
+        {coverage.requirements.length > 0 && (
+          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+            {coverage.requirements.map(r => (
+              <li key={r}>
+                <Mono>{r}</Mono>
+              </li>
+            ))}
+          </Box>
+        )}
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          Traffic to those Services is not blocked by this policy; another AuthorizationPolicy may
+          still block it. Enrol those Services with a waypoint that handles Service traffic —
+          pointing <Mono>targetRefs</Mono> at a waypoint Gateway does not help while the Service
+          itself routes past it. To enforce an L4 policy at ztunnel, target workloads with a
+          selector instead of a <Mono>targetRef</Mono>.
         </Typography>
       </ConfigWarning>
     );
@@ -253,7 +316,35 @@ function RulesTable({ rules }: { rules: AuthorizationRule[] }) {
 
 /* ------------------------------ PeerAuthentication ------------------------------ */
 
-export function peerAuthenticationHeaderInfo(pa: PeerAuthentication): Row[] {
+/**
+ * How far a PeerAuthentication reaches.
+ *
+ * Istio reads a policy with no selector in the mesh root namespace as mesh-wide,
+ * and that namespace is `meshConfig.rootNamespace` rather than `istio-system`
+ * whenever an install sets one - the AKS add-on does. Empty selectors have the
+ * same scope as omitted selectors; non-empty selectors in the root are ignored.
+ */
+export function peerAuthenticationScope(
+  pa: { metadata: { namespace?: string }; selectorLabels?: Record<string, string> },
+  rootNamespace: string | null
+): string {
+  if (rootNamespace === null) return 'Cannot determine (mesh root namespace unreadable)';
+  const hasSelector = Boolean(pa.selectorLabels && Object.keys(pa.selectorLabels).length > 0);
+  if (hasSelector) {
+    return pa.metadata.namespace === rootNamespace
+      ? 'Ignored (workload selector in root namespace)'
+      : 'Selected workloads';
+  }
+  if (pa.metadata.namespace === rootNamespace) {
+    return 'Mesh-wide (root namespace, no selector)';
+  }
+  return `Namespace ${pa.metadata.namespace}`;
+}
+
+export function peerAuthenticationHeaderInfo(
+  pa: PeerAuthentication,
+  rootNamespace: string | null
+): Row[] {
   return [
     {
       name: 'mTLS mode',
@@ -269,12 +360,7 @@ export function peerAuthenticationHeaderInfo(pa: PeerAuthentication): Row[] {
     },
     {
       name: 'Scope',
-      value:
-        pa.metadata.namespace === 'istio-system' && !pa.selectorLabels
-          ? 'Mesh-wide (root namespace, no selector)'
-          : pa.selectorLabels
-          ? 'Selected workloads'
-          : `Namespace ${pa.metadata.namespace}`,
+      value: peerAuthenticationScope(pa, rootNamespace),
       hideIfEmpty: false,
     },
   ];

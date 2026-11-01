@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { peerAuthenticationScope } from '../components/detail/SecurityDetail';
+import { peerAuthenticationScope } from '../lib/peerAuthScope';
 
 const pa = (namespace: string, selectorLabels?: Record<string, string>) => ({
   metadata: { namespace },

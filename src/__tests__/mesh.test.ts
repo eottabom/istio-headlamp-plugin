@@ -96,6 +96,25 @@ describe('podMeshState', () => {
     expect(podMeshState(fake, asObj(ns('legacy'))).mode).toBe('sidecar');
   });
 
+  it('reports sidecar when istio-proxy runs as a native sidecar init container', () => {
+    const fake = asObj({
+      metadata: { name: 'p', namespace: 'legacy' },
+      spec: {
+        initContainers: [{ name: 'istio-init' }, { name: 'istio-proxy', restartPolicy: 'Always' }],
+        containers: [{ name: 'app' }],
+      },
+    });
+    expect(podMeshState(fake, asObj(ns('legacy'))).mode).toBe('sidecar');
+  });
+
+  it('does not treat a non-restartable istio-proxy init container as a sidecar', () => {
+    const fake = asObj({
+      metadata: { name: 'p', namespace: 'legacy' },
+      spec: { initContainers: [{ name: 'istio-proxy' }], containers: [{ name: 'app' }] },
+    });
+    expect(podMeshState(fake, asObj(ns('legacy'))).mode).toBe('out-of-mesh');
+  });
+
   it('flags a pod in an injection-enabled namespace that has no sidecar', () => {
     const fake = asObj({
       metadata: { name: 'p', namespace: 'legacy' },

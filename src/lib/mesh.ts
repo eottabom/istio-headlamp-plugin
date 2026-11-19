@@ -93,8 +93,15 @@ export function podMeshState(
     return { mode: 'infra', reason: `${infra}, part of the Istio data plane` };
   }
 
-  const containers: Array<{ name?: string }> = (pod.jsonData as any)?.spec?.containers ?? [];
-  const hasProxy = containers.some(c => c.name === PROXY_CONTAINER);
+  const spec = (pod.jsonData as any)?.spec ?? {};
+  const containers: Array<{ name?: string }> = spec.containers ?? [];
+  const initContainers: Array<{ name?: string; restartPolicy?: string }> =
+    spec.initContainers ?? [];
+  // Native sidecar mode (ENABLE_NATIVE_SIDECARS) injects the proxy as a
+  // restartable init container instead of a regular container.
+  const hasProxy =
+    containers.some(c => c.name === PROXY_CONTAINER) ||
+    initContainers.some(c => c.name === PROXY_CONTAINER && c.restartPolicy === 'Always');
   const labels = labelsOf(pod) ?? {};
   const annotations = annotationsOf(pod) ?? {};
 

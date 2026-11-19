@@ -61,3 +61,28 @@ export function dataPlaneResourceUnknown(
 ): boolean {
   return !resourceFound && (errors ?? []).some(error => error?.status === 403);
 }
+
+/** A Google-managed control plane, from a Cloud Service Mesh `ControlPlaneRevision`. */
+export interface ManagedControlPlane {
+  /** Revision name, which is also the channel: `asm-managed`, `asm-managed-rapid`, ... */
+  name: string;
+  /** The `Reconciled` condition; undefined while GKE has not reported it. */
+  reconciled?: boolean;
+}
+
+/**
+ * Managed Cloud Service Mesh runs istiod outside the cluster, so there is no
+ * Deployment to find. What it leaves behind is a `ControlPlaneRevision` per
+ * channel in `istio-system`.
+ */
+export function managedControlPlanes(
+  revisions: { metadata: { name: string }; status?: { conditions?: any[] } }[]
+): ManagedControlPlane[] {
+  return revisions.map(r => {
+    const cond = (r.status?.conditions ?? []).find(c => c?.type === 'Reconciled');
+    return {
+      name: r.metadata.name,
+      reconciled: cond ? cond.status === 'True' : undefined,
+    };
+  });
+}

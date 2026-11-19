@@ -5,6 +5,7 @@ import {
   dataPlaneResourceUnknown,
   forbiddenDataPlaneNamespaces,
   isIstiod,
+  managedControlPlanes,
 } from '../lib/controlPlaneParse';
 
 const istiod = (namespace: string, name = 'istiod') => ({ metadata: { name, namespace } });
@@ -103,5 +104,40 @@ describe('dataPlaneResourceUnknown', () => {
 
   it('does not invent a namespace when an error has none', () => {
     expect(forbiddenDataPlaneNamespaces([{ status: 403 }])).toEqual([]);
+  });
+});
+
+describe('managedControlPlanes', () => {
+  const revision = (name: string, conditions?: any[]) => ({
+    metadata: { name },
+    status: conditions ? { conditions } : undefined,
+  });
+
+  it('reads the channel and the Reconciled condition of a GKE ControlPlaneRevision', () => {
+    const managed = managedControlPlanes([
+      revision('asm-managed', [
+        { type: 'Reconciled', status: 'True' },
+        { type: 'Stalled', status: 'False' },
+      ]),
+    ]);
+    expect(managed).toEqual([{ name: 'asm-managed', reconciled: true }]);
+  });
+
+  it('reports a revision GKE has not reconciled', () => {
+    expect(
+      managedControlPlanes([
+        revision('asm-managed-rapid', [{ type: 'Reconciled', status: 'False' }]),
+      ])
+    ).toEqual([{ name: 'asm-managed-rapid', reconciled: false }]);
+  });
+
+  it('leaves reconciliation unknown before GKE reports a status', () => {
+    expect(managedControlPlanes([revision('asm-managed-stable')])).toEqual([
+      { name: 'asm-managed-stable', reconciled: undefined },
+    ]);
+  });
+
+  it('finds nothing on a cluster without managed revisions', () => {
+    expect(managedControlPlanes([])).toEqual([]);
   });
 });

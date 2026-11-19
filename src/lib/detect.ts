@@ -1,20 +1,31 @@
 import { K8s } from '@kinvolk/headlamp-plugin/lib';
+import { KubeObject } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
 import { useMemo } from 'react';
 import {
   dataPlaneNamespaces,
   dataPlaneResourceUnknown,
   forbiddenDataPlaneNamespaces,
   isIstiod,
+  ManagedControlPlane,
+  managedControlPlanes,
   useControlPlaneNamespace,
 } from './controlPlane';
 import { isIstioCrdGroup } from './detectParse';
-import { WAYPOINT_GATEWAY_CLASS } from './labels';
+import { ISTIO_SYSTEM_NAMESPACE, WAYPOINT_GATEWAY_CLASS } from './labels';
 import { useMeshConfig } from './meshConfig';
 
 const CRD = K8s.ResourceClasses.CustomResourceDefinition;
 const Deployment = K8s.ResourceClasses.Deployment;
 const DaemonSet = K8s.ResourceClasses.DaemonSet;
 const GatewayClass = K8s.ResourceClasses.Gateway;
+
+/** GKE's managed Cloud Service Mesh control plane, one per release channel. */
+class ControlPlaneRevision extends KubeObject<any> {
+  static kind = 'ControlPlaneRevision';
+  static apiName = 'controlplanerevisions';
+  static apiVersion = ['mesh.cloud.google.com/v1beta1', 'mesh.cloud.google.com/v1alpha1'];
+  static isNamespaced = true;
+}
 
 export interface IstioCrdInfo {
   /** `plural.group`, e.g. `destinationrules.networking.istio.io`. */
@@ -77,6 +88,8 @@ export interface MeshStatus {
   namespace: string;
   /** istiod deployments in that namespace, usually one per revision. */
   istiod: any[];
+  /** Google-managed control planes (GKE Cloud Service Mesh), which run no istiod in the cluster. */
+  managed: ManagedControlPlane[];
   /** ztunnel DaemonSet; present only in ambient installs. */
   ztunnel: any | null;
   /** istio-cni DaemonSet; required by ambient, optional otherwise. */
@@ -128,13 +141,18 @@ export function useMeshStatus(): MeshStatus {
   const daemonSetQuery = DaemonSet.useList({ namespace: dataPlane });
   const [daemonSets] = daemonSetQuery;
   const daemonSetErrors = daemonSetQuery.errors;
+  // Errors here (404 without the CRD, 403 without access) just mean "not managed".
+  const revisionQuery = ControlPlaneRevision.useList({ namespace: ISTIO_SYSTEM_NAMESPACE });
+  const [revisions] = revisionQuery;
   const gatewayQuery = GatewayClass.useList();
   const [gateways, gatewayError] = gatewayQuery;
 
   return useMemo(() => {
     const istiod = (deployments ?? []).filter(isIstiod);
+    const managed = managedControlPlanes((revisions ?? []).map(r => r.jsonData));
     const controlPlaneUnknown =
       istiod.length === 0 &&
+      managed.length === 0 &&
       (controlPlane.unknown || (deploymentErrors ?? []).some(error => error?.status === 403));
     const ztunnel = (daemonSets ?? []).find(d => d.metadata.name.includes('ztunnel')) ?? null;
     const cni = (daemonSets ?? []).find(d => d.metadata.name.includes('istio-cni')) ?? null;
@@ -146,7 +164,9 @@ export function useMeshStatus(): MeshStatus {
     return {
       namespace: controlPlane.namespace,
       istiod,
-      controlPlaneLoading: controlPlane.loading || deploymentQuery.isLoading,
+      managed,
+      controlPlaneLoading:
+        controlPlane.loading || deploymentQuery.isLoading || revisionQuery.isLoading,
       controlPlaneUnknown,
       controlPlaneForbiddenNamespaces: [
         ...new Set([
@@ -175,6 +195,8 @@ export function useMeshStatus(): MeshStatus {
     deploymentQuery.isLoading,
     deploymentErrors,
     deployments,
+    revisions,
+    revisionQuery.isLoading,
     daemonSetQuery.isLoading,
     daemonSets,
     daemonSetErrors,

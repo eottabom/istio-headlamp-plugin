@@ -2,6 +2,7 @@
 
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/istio-headlamp-plugin)](https://artifacthub.io/packages/search?repo=istio-headlamp-plugin)
 [![CI](https://github.com/eottabom/istio-headlamp-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/eottabom/istio-headlamp-plugin/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://eottabom.github.io/istio-headlamp-plugin/coverage/badge.json)](https://eottabom.github.io/istio-headlamp-plugin/coverage/)
 
 An Istio service mesh plugin for [Headlamp](https://headlamp.dev), built around two things
 existing Istio UIs in Headlamp do not do:

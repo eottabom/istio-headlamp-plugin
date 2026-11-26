@@ -19,6 +19,7 @@ import {
 import { meshColumnsProcessor } from '../integration/tableColumns';
 import { PLUGIN_NAME } from '../lib/settings';
 import { detailRouteName, listRouteName, ROUTE_PREFIX } from '../resources/base';
+import { TrafficMapPage } from '../traffic/TrafficMapPage';
 import { ISTIO_GROUPS, ISTIO_RESOURCES, IstioResourceDef } from './resources';
 
 const ROOT = 'istio';
@@ -46,6 +47,15 @@ export function registerIstioPlugin() {
     parent: ROOT,
   });
 
+  // Always listed: Prometheus is read when the page opens, not on every page load.
+  registerSidebarEntry({
+    name: `${ROOT}-traffic-map`,
+    label: 'Traffic Map',
+    icon: 'mdi:graph-outline',
+    url: `${ROUTE_PREFIX}/traffic-map`,
+    parent: ROOT,
+  });
+
   registerSidebarEntry({
     name: `${ROOT}-waypoints`,
     label: 'Waypoints',
@@ -60,6 +70,16 @@ export function registerIstioPlugin() {
     name: `${ROOT}-overview`,
     sidebar: { item: `${ROOT}-overview`, sidebar: 'IN-CLUSTER' },
     component: () => <MeshOverview />,
+  });
+
+  registerRoute({
+    path: `${ROUTE_PREFIX}/traffic-map`,
+    exact: true,
+    name: `${ROOT}-traffic-map`,
+    sidebar: { item: `${ROOT}-traffic-map`, sidebar: 'IN-CLUSTER' },
+    // Like Headlamp's Map: the whole page, no margins.
+    isFullWidth: true,
+    component: () => <TrafficMapPage />,
   });
 
   registerRoute({

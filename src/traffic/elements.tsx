@@ -3,7 +3,7 @@
  * Headlamp's Map (frontend/src/components/resourceMap) so both look the same.
  */
 import { Icon } from '@iconify/react';
-import { Box, Button, ButtonGroup } from '@mui/material';
+import { Box, Button, ButtonGroup, Tooltip } from '@mui/material';
 import { alpha, styled, Theme, useTheme } from '@mui/material/styles';
 import {
   BaseEdge,
@@ -16,7 +16,7 @@ import {
   useStore,
 } from '@xyflow/react';
 import { memo, ReactNode } from 'react';
-import { EdgeKind, TrafficEdge, TrafficNode } from '../lib/trafficGraph';
+import { EdgeKind, Hidden, MIN_SHARE, TrafficEdge, TrafficNode } from '../lib/trafficGraph';
 import { edgePath, Point } from '../lib/trafficLayout';
 import { formatRate } from '../lib/trafficParse';
 
@@ -129,32 +129,54 @@ const KIND_TEXT: Record<TrafficNode['kind'], string> = {
   workload: 'Workload',
   'outside-in': 'External, in',
   'outside-out': 'External, out',
+  fold: 'Folded',
+};
+
+/** Icons for nodes that are not a Kubernetes object; the others use the Map's icons. */
+const OTHER_ICONS: Partial<Record<TrafficNode['kind'], string>> = {
+  'outside-in': 'mdi:earth',
+  'outside-out': 'mdi:earth',
+  fold: 'mdi:layers-outline',
+};
+
+const BADGE_TEXT = (n: TrafficNode) =>
+  n.kind === 'fold'
+    ? `${n.count} peers folded into this node`
+    : `${n.count} workloads of this namespace in these flows`;
+
+/** Shown on hover for the nodes a double-click opens. */
+const HINT: Partial<Record<TrafficNode['kind'], string>> = {
+  namespace: 'Double-click to show its workloads',
+  fold: 'Double-click to unfold',
 };
 
 export const TrafficNodeView = memo(({ data, selected }: NodeProps) => {
   const theme = useTheme();
   const { node, objKind, faded } = data as NodeData;
-  const kind = objKind ?? KIND_TEXT[node.kind];
-  const external = node.kind === 'outside-in' || node.kind === 'outside-out';
+  const kind = node.app ? 'App' : objKind ?? KIND_TEXT[node.kind];
+  const icon = node.app ? 'mdi:apps' : OTHER_ICONS[node.kind];
   return (
-    <Container selected={selected} count={node.count} style={{ opacity: faded ? FADED : 1 }}>
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
-      {!!node.count && (
-        <CircleBadge title={`${node.count} workloads of this namespace in these flows`}>
-          {node.count}
-        </CircleBadge>
-      )}
-      {!external && KubeIcon ? (
-        <KubeIcon width="42px" height="42px" kind={kind} />
-      ) : (
-        <Icon icon="mdi:earth" width="42px" height="42px" color={theme.palette.action.active} />
-      )}
-      <Box sx={{ overflow: 'hidden' }}>
-        <Box sx={{ opacity: 0.8, fontSize: 14 }}>{kind}</Box>
-        <Name>{node.name}</Name>
-      </Box>
-    </Container>
+    <Tooltip title={HINT[node.kind] ?? ''} enterDelay={400} disableInteractive>
+      <Container selected={selected} count={node.count} style={{ opacity: faded ? FADED : 1 }}>
+        <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
+        <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+        {!!node.count && <CircleBadge title={BADGE_TEXT(node)}>{node.count}</CircleBadge>}
+        {!icon && KubeIcon ? (
+          <KubeIcon width="42px" height="42px" kind={kind} />
+        ) : (
+          <Icon
+            icon={icon ?? 'mdi:cube-outline'}
+            width="42px"
+            height="42px"
+            color={theme.palette.action.active}
+          />
+        )}
+        <Box sx={{ overflow: 'hidden' }}>
+          <Box sx={{ opacity: 0.8, fontSize: 14 }}>{kind}</Box>
+          <Name>{node.name}</Name>
+        </Box>
+      </Container>
+    </Tooltip>
   );
 });
 
@@ -309,6 +331,33 @@ export function MapControls() {
   );
 }
 
+const PANEL_SX = {
+  display: 'flex',
+  gap: 2,
+  px: 1.5,
+  py: 0.75,
+  fontSize: 13,
+  borderRadius: 1,
+  bgcolor: 'background.paper',
+  border: '1px solid',
+  borderColor: 'divider',
+};
+
+/** How many flows Fold and Hide keep from being drawn on their own. */
+export function HiddenFlows({ hidden }: { hidden: Hidden }) {
+  const total = hidden.folded + hidden.small;
+  if (!total) return null;
+  const causes = [
+    hidden.folded && `${hidden.folded} folded`,
+    hidden.small && `${hidden.small} under ${MIN_SHARE * 100}%`,
+  ].filter(Boolean);
+  return (
+    <Box sx={PANEL_SX}>
+      {total} flow{total > 1 ? 's' : ''} hidden ({causes.join(', ')})
+    </Box>
+  );
+}
+
 export function Legend() {
   const theme = useTheme();
   const items: [EdgeKind, string][] = [
@@ -316,19 +365,7 @@ export function Legend() {
     ['plaintext', 'Plaintext'],
   ];
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        gap: 2,
-        px: 1.5,
-        py: 0.75,
-        fontSize: 13,
-        borderRadius: 1,
-        bgcolor: 'background.paper',
-        border: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
+    <Box sx={PANEL_SX}>
       {items.map(([kind, text]) => {
         const { color, dash } = edgeStyle(kind, theme);
         return (

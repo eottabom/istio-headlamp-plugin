@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildGraph, EdgeKind, GraphView, neighbourhood, structureKey } from '../lib/trafficGraph';
+import {
+  buildGraph,
+  EdgeKind,
+  foldId,
+  GraphView,
+  levelOf,
+  neighbourhood,
+  structureKey,
+} from '../lib/trafficGraph';
 import { Flow, OUTSIDE_IN, OUTSIDE_OUT } from '../lib/trafficParse';
 
 const all = new Set<EdgeKind>(['mtls', 'plaintext']);
@@ -88,5 +96,85 @@ describe('structureKey and neighbourhood', () => {
     expect([...n.nodes].sort()).toEqual(['a', 'b']);
     expect([...n.edges]).toEqual(['a>b:mtls']);
     expect(neighbourhood(g, null)).toBeNull();
+  });
+});
+
+describe('Group By', () => {
+  it('reads namespace pairs only when grouped by namespace with no selection', () => {
+    expect(levelOf(top)).toBe('namespace');
+    expect(levelOf({ ...top, groupBy: 'workload' })).toBe('workload');
+    expect(levelOf(inside('a'))).toBe('workload');
+  });
+
+  it('keeps every peer a workload when grouped by workload', () => {
+    const g = buildGraph([flow('a/x', 'b/y', 'mtls')], { ...top, groupBy: 'workload' });
+    expect(g.nodes.map(n => n.id)).toEqual(['a/x', 'b/y']);
+  });
+
+  it('replaces workloads by their app, and keeps those without the label', () => {
+    const flows: Flow[] = [
+      { ...flow('shop/web-v1', 'shop/db', 'mtls', 1), sourceApp: 'web', targetApp: 'db' },
+      { ...flow('shop/web-v2', 'shop/db', 'mtls', 2), sourceApp: 'web', targetApp: 'db' },
+      { ...flow('shop/job', 'shop/db', 'mtls', 4), targetApp: 'db' },
+    ];
+    const g = buildGraph(flows, { ...inside('shop'), groupBy: 'app' });
+    expect(g.nodes.map(n => n.id).sort()).toEqual(['shop/db', 'shop/job', 'shop/web']);
+    expect(g.nodes.every(n => n.app)).toBe(true);
+    expect(g.edges.find(e => e.id === 'shop/web>shop/db:mtls')?.rate).toBe(3);
+  });
+});
+
+describe('Fold > 10 peers', () => {
+  const scraper = Array.from({ length: 12 }, (_, i) => flow('mon', `ns${i}`, 'mtls', 100));
+  const folding = { ...top, foldOver: 10 };
+
+  it('folds the peers of a busy node into one node per side', () => {
+    const g = buildGraph(scraper, folding);
+    expect(g.nodes.find(n => n.kind === 'fold')).toEqual({
+      id: foldId('mon', 'out'),
+      kind: 'fold',
+      name: '12 namespaces',
+      count: 12,
+    });
+    expect(g.edges).toEqual([
+      expect.objectContaining({ source: 'mon', target: foldId('mon', 'out'), rate: 1200 }),
+    ]);
+    expect(g.hidden).toEqual({ folded: 12, small: 0 });
+  });
+
+  it('leaves nodes at the limit alone, keeps peers others reach, opens on request', () => {
+    expect(buildGraph(scraper.slice(0, 10), folding).nodes).toHaveLength(11);
+    const kept = buildGraph([...scraper, flow('ns0', 'web', 'mtls')], folding);
+    expect(kept.nodes.map(n => n.id)).toEqual(expect.arrayContaining(['ns0', 'web']));
+    const opened = buildGraph(scraper, {
+      ...folding,
+      unfolded: new Set([foldId('mon', 'out')]),
+    });
+    expect(opened.edges).toHaveLength(12);
+    expect(opened.hidden.folded).toBe(0);
+  });
+
+  it('never folds the workloads of the selected namespaces', () => {
+    const flows = Array.from({ length: 12 }, (_, i) => flow('mon/agent', `shop/w${i}`, 'mtls'));
+    const g = buildGraph(flows, { ...inside('shop'), foldOver: 10 });
+    expect(g.nodes.some(n => n.kind === 'fold')).toBe(false);
+  });
+});
+
+describe('Hide < 1%', () => {
+  it('hides flows small for both their ends, and counts them', () => {
+    const g = buildGraph(
+      [flow('a', 'b', 'mtls', 10), flow('a', 'c', 'mtls', 5000), flow('x', 'c', 'mtls', 5000)],
+      { ...top, minShare: 0.01 }
+    );
+    // a>b is 0.2 % of what a sends but all that b receives: it stays.
+    expect(g.edges.map(e => e.id).sort()).toEqual(['a>b:mtls', 'a>c:mtls', 'x>c:mtls']);
+    expect(g.hidden).toEqual({ folded: 0, small: 0 });
+    const h = buildGraph(
+      [flow('a', 'c', 'mtls', 10), flow('a', 'b', 'mtls', 5000), flow('x', 'c', 'mtls', 5000)],
+      { ...top, minShare: 0.01 }
+    );
+    expect(h.edges.map(e => e.id).sort()).toEqual(['a>b:mtls', 'x>c:mtls']);
+    expect(h.hidden).toEqual({ folded: 0, small: 1 });
   });
 });

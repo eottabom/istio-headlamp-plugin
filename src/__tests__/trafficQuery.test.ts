@@ -13,7 +13,10 @@ describe('traffic queries', () => {
     expect(ns).toMatch(
       /^sum by \(source_workload_namespace, destination_workload_namespace, connection_security_policy\)/
     );
-    expect(wl.startsWith(`sum by (${WL}, connection_security_policy)`)).toBe(true);
+    expect(
+      wl.startsWith(`sum by (${WL}, source_app, destination_app, connection_security_policy)`)
+    ).toBe(true);
+    expect(ns).not.toMatch(/^sum by \([^)]*source_app/);
   });
 
   it('read each byte metric apart, so sent and received do not collide', () => {

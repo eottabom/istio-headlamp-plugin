@@ -46,6 +46,11 @@ import { SETTINGS_URL } from '../lib/settings';
 import {
   buildGraph,
   EdgeKind,
+  FOLD_OVER,
+  GraphView,
+  GroupBy,
+  levelOf,
+  MIN_SHARE,
   neighbourhood,
   structureKey,
   TrafficGraph,
@@ -55,6 +60,7 @@ import { DEFAULT_WINDOW, Window, WINDOWS } from '../lib/trafficQuery';
 import {
   EdgeData,
   edgeStyle,
+  HiddenFlows,
   Legend,
   MAP_CSS,
   MapControls,
@@ -72,6 +78,11 @@ const KIND_TEXT: Record<EdgeKind, string> = {
   mtls: 'mTLS',
   plaintext: 'Plaintext',
 };
+const GROUP_BY: [GroupBy, string][] = [
+  ['namespace', 'Namespace'],
+  ['workload', 'Workload'],
+  ['app', 'App'],
+];
 
 /** Headlamp loads React Flow's styles with its own Map only: bring them, and the Map's. */
 function useMapCss() {
@@ -335,6 +346,11 @@ function TrafficCanvas() {
   const [namespaces, setNamespaces] = useSelectedNamespaces();
   const [shown, setShown] = useState(new Set<EdgeKind>(ALL_KINDS));
   const [rateWindow, setRateWindow] = useState<Window>(DEFAULT_WINDOW);
+  const [groupBy, setGroupBy] = useState<GroupBy>('workload');
+  const [fold, setFold] = useState(true);
+  const [hideSmall, setHideSmall] = useState(false);
+  // Fold nodes opened by a double-click, until the namespaces change.
+  const [unfolded, setUnfolded] = useState(new Set<string>());
   const [selected, setSelected] = useState<string | null>(null);
   /*
    * Double-clicks are told from clicks by hand: the first click selects the node and
@@ -342,26 +358,35 @@ function TrafficCanvas() {
    */
   const lastClick = useRef<{ id: string; at: number } | null>(null);
   const [kindsByNs, setKindsByNs] = useState<Record<string, Map<string, string>>>({});
+
+  const view: GraphView = useMemo(
+    () => ({
+      namespaces: new Set(namespaces),
+      kinds: shown,
+      groupBy,
+      foldOver: fold ? FOLD_OVER : 0,
+      unfolded,
+      minShare: hideSmall ? MIN_SHARE : 0,
+    }),
+    [namespaces, shown, groupBy, fold, unfolded, hideSmall]
+  );
   const traffic = useTrafficData(
     prom.state === 'ok' ? proxyPath(prom.endpoint) : null,
+    levelOf(view),
     namespaces,
     rateWindow
   );
 
-  useEffect(() => setSelected(null), [namespaces.join(',')]);
+  useEffect(() => {
+    setSelected(null);
+    setUnfolded(new Set());
+  }, [namespaces.join(',')]);
 
   const kinds = useMemo(
     () => new Map(namespaces.flatMap(ns => [...(kindsByNs[ns] ?? [])])),
     [kindsByNs, namespaces]
   );
-  const graph = useMemo(
-    () =>
-      buildGraph(traffic.flows, {
-        namespaces: new Set(namespaces),
-        kinds: shown,
-      }),
-    [traffic.flows, namespaces, shown]
-  );
+  const graph = useMemo(() => buildGraph(traffic.flows, view), [traffic.flows, view]);
   const layout = useStableLayout(graph);
   const { nodes, edges } = useMemo(
     () => toFlow(graph, layout, selected, kinds, theme),
@@ -405,6 +430,17 @@ function TrafficCanvas() {
       ))}
       <Box padding={2} pb={0} mb={1} display="flex" gap={1} alignItems="center" flexWrap="wrap">
         <NamespacesAutocomplete />
+        <Box sx={{ fontSize: '14px', marginLeft: 1 }}>Group By</Box>
+        <ChipGroup>
+          {GROUP_BY.map(([g, label]) => (
+            <ChipToggle
+              key={g}
+              label={label}
+              active={groupBy === g}
+              onClick={() => setGroupBy(g)}
+            />
+          ))}
+        </ChipGroup>
         <ChipGroup>
           {ALL_KINDS.map(k => (
             <ChipToggle
@@ -414,6 +450,18 @@ function TrafficCanvas() {
               onClick={() => flip(k)}
             />
           ))}
+        </ChipGroup>
+        <ChipGroup>
+          <ChipToggle
+            label={`Fold > ${FOLD_OVER} peers`}
+            active={fold}
+            onClick={() => setFold(v => !v)}
+          />
+          <ChipToggle
+            label={`Hide < ${MIN_SHARE * 100}%`}
+            active={hideSmall}
+            onClick={() => setHideSmall(v => !v)}
+          />
         </ChipGroup>
         <WindowChip value={rateWindow} onChange={setRateWindow} />
         <Button
@@ -456,6 +504,8 @@ function TrafficCanvas() {
             lastClick.current = { id: n.id, at: now };
             const { node } = n.data as NodeData;
             if (double && node.kind === 'namespace') setNamespaces([node.id]);
+            else if (double && node.kind === 'fold')
+              setUnfolded(prev => new Set(prev).add(node.id));
             else setSelected(n.id);
           }}
           onPaneClick={() => setSelected(null)}
@@ -486,7 +536,10 @@ function TrafficCanvas() {
             </Breadcrumbs>
           </Panel>
           <Panel position="bottom-right">
-            <Legend />
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+              <HiddenFlows hidden={graph.hidden} />
+              <Legend />
+            </Box>
           </Panel>
           {traffic.status === 'loading' && !nodes.length && (
             <Centered>

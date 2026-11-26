@@ -32,6 +32,8 @@ export const DEFAULT_WINDOW: Window = '5m';
 const WL =
   'source_workload_namespace, source_workload, destination_workload_namespace, destination_workload';
 const NS = 'source_workload_namespace, destination_workload_namespace';
+/** The `app` label of each end, kept so the map can group workloads by app. */
+const APPS = 'source_app, destination_app';
 
 /** Escape a value for a PromQL label matcher. */
 export const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -55,7 +57,7 @@ function scoped(namespaces: string[], inner: (matchers: string) => string): stri
 
 /** Bytes per second of one metric per workload pair and policy, each flow once. */
 function metricFlows(metric: string, window: Window, namespaces: string[]): string {
-  const by = `${WL}, connection_security_policy`;
+  const by = `${WL}, ${APPS}, connection_security_policy`;
   const rate = (matchers: string) =>
     scoped(namespaces, m => `sum by (${by}) (rate(${metric}{${matchers}${m}}[${window}]))`);
   const dst = rate('reporter="destination"');
@@ -72,7 +74,10 @@ export function namespaceTrafficQuery(window: Window = DEFAULT_WINDOW): string {
   return flows(`${NS}, connection_security_policy`, window, []);
 }
 
-/** Bytes per second of the workloads of `namespaces`, with peers in any namespace. */
+/**
+ * Bytes per second of the workloads of `namespaces` (none: of the whole cluster), with
+ * peers in any namespace.
+ */
 export function workloadTrafficQuery(namespaces: string[], window = DEFAULT_WINDOW): string {
-  return flows(`${WL}, connection_security_policy`, window, namespaces);
+  return flows(`${WL}, ${APPS}, connection_security_policy`, window, namespaces);
 }

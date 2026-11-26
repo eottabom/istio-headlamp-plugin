@@ -54,6 +54,15 @@ describe('flowsFromResult', () => {
   });
 });
 
+describe('app labels', () => {
+  it('are kept on flows when known', () => {
+    const extra = { ...mtls, source_app: 'web', destination_app: 'unknown' };
+    const [f] = flowsFromResult([wl('a', 'web-v1', 'b', 'db', extra)]);
+    expect(f.sourceApp).toBe('web');
+    expect(f.targetApp).toBeUndefined();
+  });
+});
+
 describe('formatRate', () => {
   it('scales units', () => {
     expect(formatRate(5)).toBe('5.0 B/s');

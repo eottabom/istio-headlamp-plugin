@@ -20,13 +20,18 @@ const CACHE_MS = 60_000;
 const cache = new Map<string, { at: number; data: TrafficData }>();
 
 /**
- * Traffic between namespaces (no namespace given) or of the workloads of `namespaces`.
- * One query per read; nothing reads again until `refresh`, or the namespaces or the
- * window change.
+ * Traffic between namespaces, or between workloads: those of `namespaces`, or of the
+ * whole cluster when none is given. One query per read; nothing reads again until
+ * `refresh`, or the level, the namespaces or the window change.
  */
-export function useTrafficData(prefix: string | null, namespaces: string[], window: Window) {
+export function useTrafficData(
+  prefix: string | null,
+  level: 'namespace' | 'workload',
+  namespaces: string[],
+  window: Window
+) {
   const cluster = Utils.getCluster() ?? '';
-  const key = `${cluster}|${prefix}|${namespaces.join(',')}|${window}`;
+  const key = `${cluster}|${prefix}|${level}|${namespaces.join(',')}|${window}`;
   const [state, setState] = useState({ key: '', data: EMPTY });
 
   const read = useCallback(
@@ -42,7 +47,7 @@ export function useTrafficData(prefix: string | null, namespaces: string[], wind
         data: { ...(prev.key === key ? prev.data : EMPTY), status: 'loading' },
       }));
       const started = performance.now();
-      const byWorkload = namespaces.length > 0;
+      const byWorkload = level === 'workload';
       try {
         const bytes = await promQuery(
           cluster,

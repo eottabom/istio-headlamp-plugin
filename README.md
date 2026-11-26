@@ -145,6 +145,7 @@ The plugin needs read access to:
 - **Kubernetes resources:** Namespaces, Services, Pods, Deployments and DaemonSets (ztunnel and istio-cni are looked up in the control-plane namespace, `istio-system` and `kube-system`)
 - **Optional:** Deployments across namespaces, to find the istiod control-plane namespace (such as `aks-istio-system` on the AKS add-on; falls back to `istio-system`)
 - **Optional:** ConfigMaps in that namespace, to find a custom mesh root namespace (falls back to the control-plane namespace)
+- **Optional:** `get` on `services/proxy` in the namespace of the Prometheus-compatible service set for the Traffic Map. Without it the map says it is not allowed to read Prometheus.
 
 Views that cannot read something say so rather than guessing.
 
@@ -227,6 +228,23 @@ The **Istio** section on the `reviews` Service links its routing resources,
 authorization policies and waypoint:
 
 ![Istio section on the reviews Service: routing resources, policies and waypoint](docs/images/service-context.png)
+
+### Traffic Map
+
+**Istio → Traffic Map** draws the traffic between workloads, mTLS or plaintext,
+from Istio's standard metrics: those of the selected namespaces, or of the whole
+cluster when none is selected. It works for ambient and sidecar workloads.
+
+It reads a Prometheus-compatible service (Prometheus, Thanos Query,
+VictoriaMetrics) that scrapes Istio, through the API server's service proxy. Set
+its address for each cluster in the plugin settings as
+`namespace/service:port/path`, for example `istio-system/prometheus:9090`. A
+refresh costs one query, aggregated in Prometheus; nothing refreshes by itself.
+
+Group By, Fold and Hide keep busy clusters readable: workloads can be grouped by
+namespace or by app, a node reaching more than 10 peers has them folded into one
+node (on by default), and flows under 1% of the traffic at both ends can be
+hidden (off by default). The map says how many flows these keep from being drawn.
 
 ## Compatibility
 

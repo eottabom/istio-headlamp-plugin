@@ -1,5 +1,6 @@
 import {
   registerDetailsViewSection,
+  registerPluginSettings,
   registerResourceTableColumnsProcessor,
   registerRoute,
   registerSidebarEntry,
@@ -9,12 +10,14 @@ import { MeshOverview } from '../ambient/Overview';
 import { WaypointsPage } from '../ambient/Waypoints';
 import { GenericDetail } from '../components/common/GenericDetail';
 import { GenericList } from '../components/common/GenericList';
+import { PluginSettings } from '../components/settings/PluginSettings';
 import {
   NamespaceIstioSection,
   PodIstioSection,
   ServiceIstioSection,
 } from '../integration/detailsSections';
 import { meshColumnsProcessor } from '../integration/tableColumns';
+import { PLUGIN_NAME } from '../lib/settings';
 import { detailRouteName, listRouteName, ROUTE_PREFIX } from '../resources/base';
 import { ISTIO_GROUPS, ISTIO_RESOURCES, IstioResourceDef } from './resources';
 
@@ -84,6 +87,8 @@ export function registerIstioPlugin() {
   // one that is always there, so the list page says the CRD is missing instead.
 
   registerResourceTableColumnsProcessor(meshColumnsProcessor);
+
+  registerPluginSettings(PLUGIN_NAME, PluginSettings, true);
 
   registerDetailsViewSection(({ resource }: { resource: KubeObject }) => {
     if (!resource) return null;

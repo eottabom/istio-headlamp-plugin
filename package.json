@@ -51,6 +51,8 @@
   },
   "homepage": "https://github.com/eottabom/istio-headlamp-plugin",
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.8",
+    "@xyflow/react": "^12.8.3",
     "js-yaml": "^4.1.0"
   }
 }

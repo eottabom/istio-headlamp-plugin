@@ -15,3 +15,8 @@
  */
 
 /// <reference types="@kinvolk/headlamp-plugin" />
+
+declare module '*?inline' {
+  const content: string;
+  export default content;
+}

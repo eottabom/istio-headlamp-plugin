@@ -30,6 +30,10 @@ kubectl -n istio-system rollout status ds/istio-cni-node --timeout=180s
 echo "==> sample workloads and Istio config"
 kubectl apply -f "$(dirname "$0")/sample-istio-config.yaml"
 
+echo "==> Prometheus and sample traffic (Traffic Map)"
+kubectl apply -f "https://raw.githubusercontent.com/istio/istio/release-${ISTIO_VERSION%.*}/samples/addons/prometheus.yaml"
+kubectl apply -f "$(dirname "$0")/sample-traffic.yaml"
+
 echo
 echo "Done. Context: kind-${CLUSTER}"
 kubectl -n istio-system get deploy,ds

@@ -1,5 +1,6 @@
 import {
   registerDetailsViewSection,
+  registerPluginSettings,
   registerResourceTableColumnsProcessor,
   registerRoute,
   registerSidebarEntry,
@@ -9,13 +10,16 @@ import { MeshOverview } from '../ambient/Overview';
 import { WaypointsPage } from '../ambient/Waypoints';
 import { GenericDetail } from '../components/common/GenericDetail';
 import { GenericList } from '../components/common/GenericList';
+import { PluginSettings } from '../components/settings/PluginSettings';
 import {
   NamespaceIstioSection,
   PodIstioSection,
   ServiceIstioSection,
 } from '../integration/detailsSections';
 import { meshColumnsProcessor } from '../integration/tableColumns';
+import { PLUGIN_NAME } from '../lib/settings';
 import { detailRouteName, listRouteName, ROUTE_PREFIX } from '../resources/base';
+import { TrafficMapPage } from '../traffic/TrafficMapPage';
 import { ISTIO_GROUPS, ISTIO_RESOURCES, IstioResourceDef } from './resources';
 
 const ROOT = 'istio';
@@ -43,6 +47,15 @@ export function registerIstioPlugin() {
     parent: ROOT,
   });
 
+  // Always listed: Prometheus is read when the page opens, not on every page load.
+  registerSidebarEntry({
+    name: `${ROOT}-traffic-map`,
+    label: 'Traffic Map',
+    icon: 'mdi:graph-outline',
+    url: `${ROUTE_PREFIX}/traffic-map`,
+    parent: ROOT,
+  });
+
   registerSidebarEntry({
     name: `${ROOT}-waypoints`,
     label: 'Waypoints',
@@ -57,6 +70,16 @@ export function registerIstioPlugin() {
     name: `${ROOT}-overview`,
     sidebar: { item: `${ROOT}-overview`, sidebar: 'IN-CLUSTER' },
     component: () => <MeshOverview />,
+  });
+
+  registerRoute({
+    path: `${ROUTE_PREFIX}/traffic-map`,
+    exact: true,
+    name: `${ROOT}-traffic-map`,
+    sidebar: { item: `${ROOT}-traffic-map`, sidebar: 'IN-CLUSTER' },
+    // Like Headlamp's Map: the whole page, no margins.
+    isFullWidth: true,
+    component: () => <TrafficMapPage />,
   });
 
   registerRoute({
@@ -84,6 +107,8 @@ export function registerIstioPlugin() {
   // one that is always there, so the list page says the CRD is missing instead.
 
   registerResourceTableColumnsProcessor(meshColumnsProcessor);
+
+  registerPluginSettings(PLUGIN_NAME, PluginSettings, true);
 
   registerDetailsViewSection(({ resource }: { resource: KubeObject }) => {
     if (!resource) return null;

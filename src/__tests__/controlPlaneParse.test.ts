@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ControlPlaneInputs,
   controlPlaneNamespace,
+  controlPlaneStatus,
   crdState,
   dataPlaneNamespaces,
   dataPlaneResourceUnknown,
   forbiddenDataPlaneNamespaces,
   isIstiod,
+  istiodVersion,
   managedControlPlanes,
   managedLookup,
   managedStatusNote,
@@ -216,5 +219,114 @@ describe('managedLookup', () => {
   it('waits for the revisions while nothing has answered', () => {
     expect(managedLookup('present', false, [])).toBe('pending');
     expect(managedLookup('present', true, null)).toBe('settled');
+  });
+});
+
+describe('controlPlaneStatus', () => {
+  const READ: ControlPlaneInputs = {
+    istiodFound: true,
+    managedFound: false,
+    namespaceLoading: false,
+    namespaceUnknown: false,
+    deploymentsLoading: false,
+    deploymentErrors: [],
+    revisions: 'settled',
+  };
+  const missing = { ...READ, istiodFound: false };
+  const forbidden = [{ status: 403 }];
+
+  it('reports a found istiod as settled', () => {
+    expect(controlPlaneStatus(READ)).toEqual({
+      loading: false,
+      unknown: false,
+      managedUnknown: false,
+    });
+  });
+
+  it('does not wait for the revision probe once istiod is found', () => {
+    expect(controlPlaneStatus({ ...READ, revisions: 'pending' }).loading).toBe(false);
+  });
+
+  // Without this a GKE managed mesh flashed "No istiod" before its
+  // ControlPlaneRevision arrived.
+  it('waits for the revision probe when no istiod is found', () => {
+    expect(controlPlaneStatus({ ...missing, revisions: 'pending' }).loading).toBe(true);
+  });
+
+  it('is loading while either Deployment lookup runs', () => {
+    expect(controlPlaneStatus({ ...READ, namespaceLoading: true }).loading).toBe(true);
+    expect(controlPlaneStatus({ ...READ, deploymentsLoading: true }).loading).toBe(true);
+  });
+
+  it('calls a missing control plane not found only when every lookup answered', () => {
+    expect(controlPlaneStatus(missing).unknown).toBe(false);
+  });
+
+  it('cannot tell when the Deployments were denied', () => {
+    const result = controlPlaneStatus({ ...missing, deploymentErrors: forbidden });
+    expect(result).toMatchObject({ unknown: true, managedUnknown: false });
+  });
+
+  it('cannot tell when the cluster-wide istiod lookup was denied', () => {
+    expect(controlPlaneStatus({ ...missing, namespaceUnknown: true }).unknown).toBe(true);
+  });
+
+  it('names the revision probe when only it was denied', () => {
+    const result = controlPlaneStatus({ ...missing, revisions: 'forbidden' });
+    expect(result).toMatchObject({ unknown: true, managedUnknown: true });
+  });
+
+  it('does not blame the revision probe when the Deployments were denied too', () => {
+    const result = controlPlaneStatus({
+      ...missing,
+      deploymentErrors: forbidden,
+      revisions: 'forbidden',
+    });
+    expect(result.managedUnknown).toBe(false);
+  });
+
+  it('accepts a managed control plane even where Deployments were denied', () => {
+    const result = controlPlaneStatus({
+      ...missing,
+      managedFound: true,
+      deploymentErrors: forbidden,
+    });
+    expect(result.unknown).toBe(false);
+  });
+
+  it('treats only Forbidden as a denied lookup', () => {
+    expect(controlPlaneStatus({ ...missing, deploymentErrors: [{ status: 500 }] }).unknown).toBe(
+      false
+    );
+  });
+});
+
+describe('istiodVersion', () => {
+  const withImage = (image?: string) => [
+    { jsonData: { spec: { template: { spec: { containers: [{ image }] } } } } },
+  ];
+
+  it.each([
+    ['docker.io/istio/pilot:1.30.1', '1.30.1'],
+    ['gcr.io/istio-release/pilot:1.30.1-distroless', '1.30.1-distroless'],
+    ['registry.local:5000/istio/pilot:1.30.1', '1.30.1'],
+    ['docker.io/istio/pilot:1.30.1@sha256:abc123', '1.30.1'],
+  ])('reads the tag of %s', (image, tag) => {
+    expect(istiodVersion(withImage(image))).toBe(tag);
+  });
+
+  // These used to show part of the digest, or the image path, as the version.
+  it.each([
+    'docker.io/istio/pilot@sha256:abc123',
+    'registry.local:5000/istio/pilot',
+    'istio/pilot',
+    'istio/pilot:',
+  ])('has no version for untagged %s', image => {
+    expect(istiodVersion(withImage(image))).toBeUndefined();
+  });
+
+  it('has no version without an istiod or an image', () => {
+    expect(istiodVersion([])).toBeUndefined();
+    expect(istiodVersion(withImage(undefined))).toBeUndefined();
   });
 });

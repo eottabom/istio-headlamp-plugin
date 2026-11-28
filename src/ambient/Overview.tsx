@@ -6,8 +6,8 @@ import { ReactNode, useMemo } from 'react';
 import { MeshBadge } from '../components/common/Badges';
 import { ChipList } from '../components/common/SpecSection';
 import { Mono, SpecTable } from '../components/detail/Table';
-import { managedStatusNote } from '../lib/controlPlaneParse';
-import { istiodVersion, useIstioCrds, useMeshStatus } from '../lib/detect';
+import { istiodVersion, managedStatusNote } from '../lib/controlPlaneParse';
+import { useIstioCrds, useMeshStatus } from '../lib/detect';
 import { WAYPOINT_FOR } from '../lib/labels';
 import { namespaceMeshState, resolveWaypoint } from '../lib/mesh';
 
@@ -79,7 +79,7 @@ export function MeshOverview() {
               ? 'Cannot determine'
               : managedOnly
               ? 'Managed'
-              : version ?? 'Not found'
+              : version ?? (status.istiod.length > 0 ? 'Version unknown' : 'Not found')
           }
           detail={
             status.controlPlaneLoading

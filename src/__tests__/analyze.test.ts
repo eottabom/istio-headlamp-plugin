@@ -8,6 +8,8 @@ import {
   l7Requirements,
   loadBalancerName,
   normaliseTargetRefs,
+  ruleMatches,
+  ruleSearchTerms,
   serviceEntryPortSummary,
   serviceEntryWarning,
 } from '../lib/analyze';
@@ -286,5 +288,59 @@ describe('authorizationOperationsBrief', () => {
     expect(authorizationOperationsBrief([{ from: [{ source: { namespaces: ['a'] } }] }])).toEqual([
       'any operation',
     ]);
+  });
+});
+
+describe('rule search', () => {
+  const rule = {
+    from: [
+      {
+        source: {
+          principals: ['cluster.local/ns/shop/sa/frontend'],
+          notNamespaces: ['legacy'],
+          ipBlocks: ['10.0.0.0/8'],
+        },
+      },
+    ],
+    to: [{ operation: { methods: ['GET'], notPaths: ['/admin/*'], ports: ['8080'] } }],
+    when: [{ key: 'request.auth.claims[iss]', values: ['https://accounts.example.com'] }],
+  };
+
+  it('collects every source, operation and condition value', () => {
+    expect(ruleSearchTerms(rule)).toEqual([
+      'cluster.local/ns/shop/sa/frontend',
+      'legacy',
+      '10.0.0.0/8',
+      'GET',
+      '/admin/*',
+      '8080',
+      'request.auth.claims[iss]',
+      'https://accounts.example.com',
+    ]);
+  });
+
+  it('has no terms for an empty rule', () => {
+    expect(ruleSearchTerms({})).toEqual([]);
+  });
+
+  it('matches part of any term, ignoring case', () => {
+    expect(ruleMatches(rule, 'frontend')).toBe(true);
+    expect(ruleMatches(rule, 'get')).toBe(true);
+    expect(ruleMatches(rule, 'ADMIN')).toBe(true);
+    expect(ruleMatches(rule, 'claims[iss]')).toBe(true);
+  });
+
+  // An excluded value is still what the rule is about, so searching for it
+  // should find the rule.
+  it('matches the not* fields too', () => {
+    expect(ruleMatches(rule, 'legacy')).toBe(true);
+  });
+
+  it('does not match a value the rule never mentions', () => {
+    expect(ruleMatches(rule, 'POST')).toBe(false);
+  });
+
+  it('matches everything when the filter is empty', () => {
+    expect(ruleMatches({}, '')).toBe(true);
   });
 });

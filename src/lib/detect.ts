@@ -2,6 +2,7 @@ import { K8s } from '@kinvolk/headlamp-plugin/lib';
 import { KubeObject } from '@kinvolk/headlamp-plugin/lib/k8s/cluster';
 import { useMemo } from 'react';
 import {
+  controlPlaneStatus,
   crdState,
   dataPlaneNamespaces,
   dataPlaneResourceUnknown,
@@ -160,18 +161,21 @@ export function useMeshStatus(): MeshStatus {
   // While Headlamp probes the apiVersions, the list is null with isLoading
   // false; calling that "not managed" flashed the "No istiod" warning.
   const lookup = managedLookup(revisionCrd, revisionQuery.items !== null, revisionQuery.errors);
-  const revisionsForbidden = lookup === 'forbidden';
-  const revisionsPending = lookup === 'pending';
   const gatewayQuery = GatewayClass.useList();
   const [gateways, gatewayError] = gatewayQuery;
 
   return useMemo(() => {
     const istiod = (deployments ?? []).filter(isIstiod);
     const managed = managedControlPlanes(revisions.map(r => r.jsonData));
-    const deploymentsForbidden =
-      controlPlane.unknown || (deploymentErrors ?? []).some(error => error?.status === 403);
-    const controlPlaneUnknown =
-      istiod.length === 0 && managed.length === 0 && (deploymentsForbidden || revisionsForbidden);
+    const controlPlaneState = controlPlaneStatus({
+      istiodFound: istiod.length > 0,
+      managedFound: managed.length > 0,
+      namespaceLoading: controlPlane.loading,
+      namespaceUnknown: controlPlane.unknown,
+      deploymentsLoading: deploymentQuery.isLoading,
+      deploymentErrors,
+      revisions: lookup,
+    });
     const ztunnel = (daemonSets ?? []).find(d => d.metadata.name.includes('ztunnel')) ?? null;
     const cni = (daemonSets ?? []).find(d => d.metadata.name.includes('istio-cni')) ?? null;
 
@@ -183,14 +187,9 @@ export function useMeshStatus(): MeshStatus {
       namespace: controlPlane.namespace,
       istiod,
       managed,
-      // The revisions only matter without an istiod; do not hold a regular
-      // cluster on a probe that is expected to 404.
-      controlPlaneLoading:
-        controlPlane.loading ||
-        deploymentQuery.isLoading ||
-        (istiod.length === 0 && revisionsPending),
-      controlPlaneUnknown,
-      managedUnknown: revisionsForbidden && !deploymentsForbidden,
+      controlPlaneLoading: controlPlaneState.loading,
+      controlPlaneUnknown: controlPlaneState.unknown,
+      managedUnknown: controlPlaneState.managedUnknown,
       controlPlaneForbiddenNamespaces: [
         ...new Set([
           ...controlPlane.forbiddenNamespaces,
@@ -219,8 +218,7 @@ export function useMeshStatus(): MeshStatus {
     deploymentErrors,
     deployments,
     revisions,
-    revisionsPending,
-    revisionsForbidden,
+    lookup,
     daemonSetQuery.isLoading,
     daemonSets,
     daemonSetErrors,
@@ -228,13 +226,6 @@ export function useMeshStatus(): MeshStatus {
     gatewayError,
     gatewayQuery.isLoading,
   ]);
-}
-
-/** The image tag of the first istiod deployment, e.g. `1.30.1-distroless`. */
-export function istiodVersion(istiod: any[]): string | undefined {
-  const image: string | undefined =
-    istiod?.[0]?.jsonData?.spec?.template?.spec?.containers?.[0]?.image;
-  return image?.split(':').pop();
 }
 
 /**

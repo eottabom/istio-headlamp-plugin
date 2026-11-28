@@ -125,3 +125,58 @@ export function managedLookup(
   if ((errors ?? []).some(error => error?.status === 403)) return 'forbidden';
   return revisionsLoaded || errors?.length ? 'settled' : 'pending';
 }
+
+/** What `useMeshStatus` reads before it can say anything about the control plane. */
+export interface ControlPlaneInputs {
+  istiodFound: boolean;
+  managedFound: boolean;
+  /** The cluster-wide istiod lookup is still running. */
+  namespaceLoading: boolean;
+  /** The cluster-wide istiod lookup found nothing and was denied somewhere. */
+  namespaceUnknown: boolean;
+  deploymentsLoading: boolean;
+  deploymentErrors: ({ status?: number } | null | undefined)[] | null | undefined;
+  revisions: 'pending' | 'forbidden' | 'settled';
+}
+
+/**
+ * Whether the control plane is still being checked, or is missing only because
+ * this account could not look. "Not found" is claimed only when every lookup
+ * that could have found one was allowed to answer.
+ */
+export function controlPlaneStatus(inputs: ControlPlaneInputs): {
+  loading: boolean;
+  unknown: boolean;
+  managedUnknown: boolean;
+} {
+  const deploymentsForbidden =
+    inputs.namespaceUnknown || (inputs.deploymentErrors ?? []).some(error => error?.status === 403);
+  const revisionsForbidden = inputs.revisions === 'forbidden';
+  return {
+    // The revisions only matter without an istiod; do not hold a regular
+    // cluster on a probe that is expected to 404.
+    loading:
+      inputs.namespaceLoading ||
+      inputs.deploymentsLoading ||
+      (!inputs.istiodFound && inputs.revisions === 'pending'),
+    unknown:
+      !inputs.istiodFound && !inputs.managedFound && (deploymentsForbidden || revisionsForbidden),
+    managedUnknown: revisionsForbidden && !deploymentsForbidden,
+  };
+}
+
+/**
+ * The image tag of the first istiod deployment, e.g. `1.30.1-distroless`.
+ *
+ * Only the last path segment can carry the tag, since a registry host may
+ * have a port, and a digest-pinned image ends in `@sha256:...` after it.
+ */
+export function istiodVersion(istiod: { jsonData?: any }[]): string | undefined {
+  const image: string | undefined =
+    istiod?.[0]?.jsonData?.spec?.template?.spec?.containers?.[0]?.image;
+  if (!image) return undefined;
+  const name = image.split('@')[0];
+  const lastSegment = name.slice(name.lastIndexOf('/') + 1);
+  const colon = lastSegment.indexOf(':');
+  return colon === -1 ? undefined : lastSegment.slice(colon + 1) || undefined;
+}
